@@ -1,0 +1,19 @@
+FROM node:20
+
+WORKDIR /usr/src/app
+
+# Copy server package files
+COPY server/package*.json server/
+
+# Install dependencies from package.json
+RUN cd server && npm install
+
+# Install missing dependencies required by the code
+RUN cd server && npm install express@4.21.2 passport@0.7.0 express-session@1.18.2 nodemailer@7.0.10 passport-google-oauth20@2.0.0
+
+# Copy server source code
+COPY server/ server/
+
+EXPOSE 5000
+
+CMD ["sh", "-c", "cd server && npm start"]

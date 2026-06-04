@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.sample
+!.env.example
+
+# Credentials & Certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.cert
+*.crt
+credentials.json
+secrets.json
+config/secrets.js
+config/credentials.js
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+*.sql
+dumps/
+backups/
+
+# Session & Cache
+sessions/
+.cache/
+
+# Uploads & User Data
+uploads/
+user-data/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*

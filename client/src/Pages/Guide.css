@@ -1,0 +1,98 @@
+.book-links li {
+  margin-bottom: 10px;
+}
+
+.book-links a {
+  color: #004d99;
+  font-weight: 600;
+  font-size: 16px;
+  text-decoration: none;
+}
+
+.book-links a:hover {
+  text-decoration: underline;
+  color: #002f63;
+}
+
+.book-note {
+  margin-top: 12px;
+  font-size: 15px;
+  font-style: italic;
+  color: #444;
+}
+body {
+  background-color: #f6f8fa;
+  margin: 0;
+  font-family: "Poppins", sans-serif;
+}
+
+.guide-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 25px 12px;
+}
+
+.guide-container {
+  max-width: 900px;
+  background: #ffffff;
+  padding: 40px;
+  border-radius: 14px;
+  box-shadow: 0 5px 25px rgba(0,0,0,0.1);
+}
+
+.guide-title {
+  font-size: 34px;
+  font-weight: 700;
+  color: #003566;
+  margin-bottom: 8px;
+}
+
+.guide-subtitle {
+  font-size: 16px;
+  color: #5c6975;
+  margin-bottom: 35px;
+}
+
+section {
+  margin-bottom: 40px;
+  line-height: 1.7;
+}
+
+section h2 {
+  font-size: 24px;
+  color: #003566;
+  margin-bottom: 14px;
+}
+
+section p,
+ul,
+ol {
+  font-size: 16px;
+  color: #333;
+}
+
+ul,
+ol {
+  margin-left: 22px;
+}
+
+li {
+  margin-bottom: 8px;
+}
+
+.highlight-box {
+  background: #f1f6ff;
+  padding: 18px;
+  border-left: 6px solid #004d99;
+  border-radius: 6px;
+  font-style: italic;
+}
+
+@media (max-width: 600px) {
+  .guide-container {
+    padding: 24px;
+  }
+  .guide-title {
+    font-size: 26px;
+  }
+}
