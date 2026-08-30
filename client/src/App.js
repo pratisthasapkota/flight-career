@@ -1,7 +1,6 @@
 
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
-import Main from './Nav/Main';
 import Explore from './Nav/Explore';
 import Colleges from './Nav/Colleges';
 import Contact from './Nav/Contact';
@@ -11,11 +10,8 @@ import Student from './Nav/Student';
 import Store from './Nav/Store';
 import Web from './Web';
 import About from './About';
-import Top from './Components/Top';
-import Jobs from './Pages/Jobs';
+import { Navigate } from 'react-router-dom';
 import Call from './Pages/Call';
-
-
 
 import Apply from './Apply';
 
@@ -30,39 +26,59 @@ import Tips from './Pages/Tips';
 import Question from './Pages/Question';
 
 import Pilots from './Explores/Pilots';
+
+import CareerLayout from './Components/CareerLayout';
+import Careers from './Pages/Careers/Careers';
+import WhyWorkWithUs from './Pages/Careers/WhyWorkWithUs';
+import WhatCanYouDo from './Pages/Careers/WhatCanYouDo';
+import StudentCorner from './Pages/Careers/StudentCorner';
+import BecomeAnEmployee from './Pages/Careers/BecomeAnEmployee';
+import Vacancies from './Pages/Careers/Vacancies';
+import FAQ from './Pages/Careers/FAQ';
+
+import AdminLogin from './Pages/Admin/AdminLogin';
+import AdminDashboard from './Pages/Admin/AdminDashboard';
+import RequireAuth from './Components/RequireAuth';
+
 function App() {
   return (
     
       <Routes>
+        <Route path="/" element={<Student/>} />
         <Route path="/login" element={<HomeScreen />} />
-        <Route path="/" element={<Main/>} />
         <Route path="/about" element={<About/>} />
         <Route path="/explore" element={<Explore/>} />
         <Route path="/web" element={<Web />} />
         <Route path="/colleges" element={<Colleges />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/apply" element={<Apply />} />
-        <Route path="/student" element={<Student />} />
         <Route path="/sign" element={<Sign />} />
-        <Route path="/store" element={<Store/>} />
-        <Route path="/price" element={<Price/>} />
-        <Route path="/final" element={<Final/>} />
-        <Route path="/finals" element={<Finals/>} />
-        <Route path="/question" element={<Question/>} />
-        <Route path="/training" element={<Training/>} />
-        <Route path="/operation" element={<Operation/>} />
-        <Route path="/craft" element={<Craft/>} />
-        <Route path="/hostess" element={<Hostess/>} />
-        <Route path="/tips" element={<Tips/>} />
-        <Route path="/pilots" element={<Pilots/>} />
-        <Route path="/question" element={<Question/>} />
-        <Route path="/jobs" element={<Jobs/>} />
+        <Route path="/store" element={<Store />} />
+        <Route path="/price" element={<Price />} />
+        <Route path="/final" element={<RequireAuth><Final /></RequireAuth>} />
+        <Route path="/finals" element={<RequireAuth><Finals /></RequireAuth>} />
+        <Route path="/question" element={<RequireAuth><Question /></RequireAuth>} />
+        <Route path="/training" element={<RequireAuth><Training /></RequireAuth>} />
+        <Route path="/operation" element={<RequireAuth><Operation /></RequireAuth>} />
+        <Route path="/craft" element={<RequireAuth><Craft /></RequireAuth>} />
+        <Route path="/hostess" element={<RequireAuth><Hostess /></RequireAuth>} />
+        <Route path="/tips" element={<RequireAuth><Tips /></RequireAuth>} />
+        <Route path="/pilots" element={<RequireAuth><Pilots /></RequireAuth>} />
+        <Route path="/jobs" element={<Navigate to="/careers/vacancies" replace />} />
         <Route path="/call" element={<Call/>} />
-         
 
+        <Route path="/careers" element={<CareerLayout />}>
+          <Route index element={<Careers />} />
+          <Route path="why-work-with-us" element={<WhyWorkWithUs />} />
+          <Route path="what-can-you-do" element={<WhatCanYouDo />} />
+          <Route path="student-corner" element={<StudentCorner />} />
+          <Route path="become-an-employee" element={<BecomeAnEmployee />} />
+          <Route path="vacancies" element={<Vacancies />} />
+          <Route path="faq" element={<FAQ />} />
+        </Route>
 
-
-
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
       </Routes>
    
   );

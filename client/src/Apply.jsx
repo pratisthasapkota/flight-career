@@ -20,11 +20,16 @@ function Apply() {
 
   const handleSubmit = async(e) => {
     e.preventDefault();
-    console.log("Form Submitted:", formData);
-    setSubmitted(true);
-    const result= await axios.post(`${process.env.REACT_APP_BACKEND_URL}/api/apply`, 
+    try {
+      await axios.post(
+        `${process.env.REACT_APP_BACKEND_URL || "http://localhost:5000"}/apply`,
         formData
       );
+      setSubmitted(true);
+    } catch (error) {
+      console.log(error);
+      alert("Something went wrong while submitting. Please try again.");
+    }
   };
 
   return (

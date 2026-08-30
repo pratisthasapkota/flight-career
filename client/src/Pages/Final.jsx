@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import Navbar from "../Components/Navbar";
 import Footer from "../Components/Footer";
 
@@ -107,9 +108,9 @@ const Final = () => {
           <p>Click below to get full access to the book.</p>
 
          
-          <a href="https://yourbooklink.com" target="_blank" rel="noopener noreferrer">
+          <Link to="/finals" style={{ backgroundColor: "yellow", padding: "13px 35px", fontWeight: 700, borderRadius: 8, textDecoration: "none", color: "black", display: "inline-block", marginTop: 18 }}>
             Read the Book
-          </a>
+          </Link>
         </div>
       </div>
 

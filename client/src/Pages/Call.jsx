@@ -7,15 +7,16 @@ const Call = () => {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const email = params.get('email');
-    const token = params.get('token');
+    const name = params.get('name');
 
-    if (email && token) {
+    if (email) {
       localStorage.setItem('email', email);
-      localStorage.setItem('token', token);
-      navigate('/student'); // redirect to protected page
-    } else {
-      navigate('/'); // redirect to login if missing
     }
+    if (name) {
+      localStorage.setItem('name', name);
+    }
+
+    navigate('/');
   }, [navigate]);
 
   return <h2>Logging in with Google...</h2>;

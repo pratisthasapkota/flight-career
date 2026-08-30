@@ -1,76 +1,31 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from 'react';
 import { FaGoogle } from "react-icons/fa";
 import axios from 'axios';
-import { useGoogleLogin } from '@react-oauth/google';
 
 const Sign = () => {
-  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const backendUrl = process.env.REACT_APP_BACKEND_URL;
+  const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
 
-  const googleLogin = useGoogleLogin({
-    flow: 'auth-code',
-    scope: 'openid profile email',
-    onSuccess: async (codeResponse) => {
-      console.log('Google Login Success:', codeResponse);
-      try {
-        setIsLoading(true);
-        setErrorMsg('');
-        setSuccessMsg('');
-        console.log('Sending code to backend:', `${backendUrl}/auth/google/callback`);
-        const response = await axios.post(`${backendUrl}/auth/google/callback`, {
-          code: codeResponse.code,
-        }, {
-          withCredentials: true
-        });
-        console.log('Backend response:', response.data);
-
-        if (response.data.success) {
-          setSuccessMsg('Successfully signed up');
-          setTimeout(() => {
-            navigate('/');
-          }, 1500);
-        }
-      } catch (error) {
-        console.error('Google login error:', error);
-        if (error.response) {
-          console.error('Backend error data:', error.response.data);
-          const errorMsg = error.response.data.error || 'Unknown error';
-          const errorDetails = error.response.data.message || '';
-
-          if (errorMsg === 'user_already_exists') {
-            setSuccessMsg('You already have an account! Redirecting...');
-            setTimeout(() => {
-              navigate('/');
-            }, 1500);
-          } else if (errorMsg === 'database_error') {
-            setErrorMsg(`Database error: ${errorDetails}`);
-          } else {
-            setErrorMsg(`Login failed: ${errorMsg} ${errorDetails}`);
-          }
-        } else if (error.message && error.message.includes('invalid_client')) {
-          setErrorMsg('OAuth configuration error. Please check your Google Client ID and Secret.');
-        } else {
-          setErrorMsg('Failed to sign in with Google. Please try again.');
-        }
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    onError: errorResponse => {
-      console.error('Google Login Failed:', errorResponse);
-      setErrorMsg('Google Sign-In failed. Check console for details.');
-    },
-  });
+  const handleGoogleLogin = () => {
+    window.location.href = `${backendUrl}/auth/google`;
+  };
 
   const handleClick = async (e) => {
     e.preventDefault();
+    setErrorMsg("");
+    setSuccessMsg("");
+
+    if (!email || !password) {
+      setErrorMsg("Please enter your email and password");
+      return;
+    }
+
+    setIsLoading(true);
     try {
       const response = await axios.post(`${backendUrl}/sign`, {
         email,
@@ -78,18 +33,21 @@ const Sign = () => {
       });
 
       if (response.data.success) {
-        alert('Sign up successful!');
-        navigate('/login');
+        setSuccessMsg(response.data.message || "Sign up successful!");
+        setEmail("");
+        setPassword("");
       } else {
         setErrorMsg(response.data.message || "Something went wrong");
       }
     } catch (error) {
       setErrorMsg(error.response?.data?.message || "Server error");
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const seeClick = () => {
-    googleLogin();
+    handleGoogleLogin();
   };
 
   return (
@@ -159,6 +117,7 @@ const Sign = () => {
 
         <button
           onClick={handleClick}
+          disabled={isLoading}
           style={{
             width: '100%',
             padding: '12px',
@@ -167,11 +126,12 @@ const Sign = () => {
             backgroundColor: '#5867d8',
             color: 'white',
             fontWeight: 'bold',
-            cursor: 'pointer',
+            cursor: isLoading ? 'not-allowed' : 'pointer',
+            opacity: isLoading ? 0.7 : 1,
             marginBottom: '20px'
           }}
         >
-          Sign Up
+          {isLoading ? 'Signing up...' : 'Sign Up'}
         </button>
 
         <style>{`

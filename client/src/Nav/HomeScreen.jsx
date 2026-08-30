@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { FaGoogle } from "react-icons/fa";
 import axios from 'axios';
-import { useGoogleLogin } from '@react-oauth/google';
+import { setAuth } from '../auth';
 
- const backendUrl = process.env.REACT_APP_BACKEND_URL;
+ const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
 
 
 const HomeScreen = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -18,73 +19,41 @@ const HomeScreen = () => {
   // ------------------- Email/Password Login -------------------
   const handleClick = async (e) => {
     e.preventDefault();
+    setErrorMsg("");
+    setSuccessMsg("");
+
     if (!email || !password) {
       setErrorMsg("Please enter email and password");
       return;
     }
 
+    setIsLoading(true);
     try {
       const response = await axios.post(`${backendUrl}/login`, { email, password });
-      // only runs for 2xx
       const { success, message, token, user } = response.data;
       if (success) {
-        localStorage.setItem("token", token);
-        localStorage.setItem("email", user.email);
-        navigate('/student');
+        setAuth({ token, email: user.email });
+        navigate(location.state?.from || "/", {
+          state: location.state?.checkoutState || undefined,
+        });
       } else {
         setErrorMsg(message);
       }
     } catch (error) {
       if (error.response) {
-        // handle backend error messages
         setErrorMsg(error.response.data.message || "Login failed");
       } else {
         setErrorMsg("Server error. Try again later.");
       }
-}
-
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // ------------------- Google Login -------------------
-  const googleLogin = useGoogleLogin({
-    flow: 'auth-code', // auth code flow
-    onSuccess: async (codeResponse) => {
-      try {
-        setIsLoading(true);
-        setErrorMsg('');
-        setSuccessMsg('');
-
-        // Send auth code to your backend
-        const response = await axios.get(
-          `http://localhost:5000/auth/google`,
-          { code: codeResponse.code },
-          { withCredentials: true } // important for cookies if your backend sets them
-        );
-
-        if (response.data.success) {
-          setSuccessMsg('Successfully logged in! Redirecting...');
-          localStorage.setItem("token", response.data.token || "");
-          localStorage.setItem("email", response.data.user?.email || "");
-          setTimeout(() => navigate('/student'), 1500);
-        } else {
-          setErrorMsg('Google login failed');
-        }
-      } catch (error) {
-        console.error('Google login error:', error);
-        if (error.response) {
-          setErrorMsg(error.response.data.error || 'Unknown error');
-        } else {
-          setErrorMsg('Failed to sign in with Google');
-        }
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    onError: errorResponse => {
-      console.error('Google Login Failed:', errorResponse);
-      setErrorMsg('Google Sign-In failed. Check OAuth configuration.');
-    },
-  });
+  const handleGoogleLogin = () => {
+    window.location.href = `${backendUrl}/auth/google`;
+  };
 
   return (
     <div style={{
@@ -149,6 +118,7 @@ const HomeScreen = () => {
 
         <button
           onClick={handleClick}
+          disabled={isLoading}
           style={{
             width: '100%',
             padding: '12px',
@@ -157,11 +127,12 @@ const HomeScreen = () => {
             backgroundColor: '#5867d8',
             color: 'white',
             fontWeight: 'bold',
-            cursor: 'pointer',
+            cursor: isLoading ? 'not-allowed' : 'pointer',
+            opacity: isLoading ? 0.7 : 1,
             marginBottom: '20px'
           }}
         >
-          Sign In
+          {isLoading ? 'Signing in...' : 'Sign In'}
         </button>
 
         <style>{`
@@ -186,7 +157,7 @@ const HomeScreen = () => {
         `}</style>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
-          <button onClick={googleLogin} className="google-btn">
+          <button onClick={handleGoogleLogin} className="google-btn">
             <FaGoogle /> Continue with Google
           </button>
         </div>

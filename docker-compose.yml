@@ -1,46 +1,64 @@
-version: '3.8'
+version: "3.8"
 
 services:
   db:
     image: postgres:15
     restart: always
     environment:
-      POSTGRES_DB: login
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   server:
     build:
       context: .
       dockerfile: Dockerfile.server
     restart: always
-    ports:
-      - "5000:5000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
+      NODE_ENV: ${NODE_ENV}
+      PORT: ${PORT}
+      CLIENT_URL: ${CLIENT_URL}
+      BACKEND_URL: ${BACKEND_URL}
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      SESSION_SECRET: ${SESSION_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
       DB_HOST: db
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: login
-      # Add your actual values for these
-      EMAIL_USER: your_email@gmail.com
-      EMAIL_PASS: your_app_password
-      GOOGLE_CLIENT_ID: your_google_client_id
-      GOOGLE_CLIENT_SECRET: your_google_client_secret
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      EMAIL_USER: ${EMAIL_USER}
+      EMAIL_PASS: ${EMAIL_PASS}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH}
+    expose:
+      - "5000"
 
   client:
     build:
       context: .
       dockerfile: Dockerfile.client
+      args:
+        REACT_APP_BACKEND_URL: ${BACKEND_URL}
+        REACT_APP_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
     restart: always
     ports:
-      - "3000:80"
+      - "80:80"
     depends_on:
       - server
 

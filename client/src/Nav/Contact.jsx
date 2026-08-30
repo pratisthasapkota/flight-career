@@ -1,8 +1,46 @@
-import React from "react";
+import React, { useState } from "react";
 import Navbar from "../Components/Navbar";
 import Footer from "../Components/Footer";
+import axios from "axios";
 
 const Contact = () => {
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    role: "",
+    message: "",
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [status, setStatus] = useState(null);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.name || !form.email || !form.message) {
+      setStatus({ ok: false, text: "Please fill in your name, email, and message." });
+      return;
+    }
+
+    setSubmitting(true);
+    setStatus(null);
+    try {
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+      await axios.post(`${backendUrl}/employee-interest`, form);
+      setStatus({ ok: true, text: "Message sent successfully! We will get back to you soon." });
+      setForm({ name: "", email: "", phone: "", role: "", message: "" });
+    } catch (error) {
+      console.log(error);
+      setStatus({ ok: false, text: "Something went wrong. Please try again." });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <>
       <Navbar />
@@ -138,20 +176,59 @@ const Contact = () => {
 
         
         <section className="contact-section">
-          <div className="contact-form">
-            <input type="text" placeholder="Your Name" required />
-            <input type="email" placeholder="Your Email" required />
-            <input type="tel" placeholder="Your Phone (optional)" />
-            <select>
+          <form className="contact-form" onSubmit={handleSubmit}>
+            <input
+              type="text"
+              name="name"
+              placeholder="Your Name"
+              value={form.name}
+              onChange={handleChange}
+              required
+            />
+            <input
+              type="email"
+              name="email"
+              placeholder="Your Email"
+              value={form.email}
+              onChange={handleChange}
+              required
+            />
+            <input
+              type="tel"
+              name="phone"
+              placeholder="Your Phone (optional)"
+              value={form.phone}
+              onChange={handleChange}
+            />
+            <select name="role" value={form.role} onChange={handleChange}>
               <option value="">Select Department</option>
-              <option value="support">Support</option>
-              <option value="training">Training</option>
-              <option value="careers">Careers</option>
-              <option value="feedback">Feedback</option>
+              <option value="Support">Support</option>
+              <option value="Training">Training</option>
+              <option value="Careers">Careers</option>
+              <option value="Feedback">Feedback</option>
             </select>
-            <textarea placeholder="Your Message" required></textarea>
-            <button type="submit">Send Message</button>
-          </div>
+            <textarea
+              name="message"
+              placeholder="Your Message"
+              value={form.message}
+              onChange={handleChange}
+              required
+            ></textarea>
+            <button type="submit" disabled={submitting}>
+              {submitting ? "Sending..." : "Send Message"}
+            </button>
+            {status && (
+              <p
+                style={{
+                  marginTop: "12px",
+                  fontWeight: "500",
+                  color: status.ok ? "#1a7f37" : "#b42318",
+                }}
+              >
+                {status.text}
+              </p>
+            )}
+          </form>
 
           
           <div className="contact-info">
@@ -161,7 +238,7 @@ const Contact = () => {
             <div>🕒 Hours: Mon – Fri, 9:00 AM – 6:00 PM</div>
           </div>
 
-         \
+
           <div className="contact-map">
             <iframe
               title="Office Map"

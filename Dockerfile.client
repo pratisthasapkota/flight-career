@@ -1,8 +1,14 @@
 FROM node:20-alpine as build
 
+ARG REACT_APP_BACKEND_URL=http://localhost:5000
+ARG REACT_APP_GOOGLE_CLIENT_ID=
+
+ENV REACT_APP_BACKEND_URL=$REACT_APP_BACKEND_URL
+ENV REACT_APP_GOOGLE_CLIENT_ID=$REACT_APP_GOOGLE_CLIENT_ID
+
 WORKDIR /app
 
-COPY client/package*.json client/ ./
+COPY client/package*.json client/
 
 RUN cd client && npm install
 

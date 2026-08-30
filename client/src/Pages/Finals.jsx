@@ -109,27 +109,27 @@ const Finals = () => {
 
           <ul className="book-links">
             <li>
-              <a href="https://www.amazon.com/dp/1539551724" target="_blank">
+              <a href="https://www.amazon.com/dp/1539551724" target="_blank" rel="noreferrer">
                 ✈ Flight Attendant Interview Questions & Answers – Natalie King
               </a>
             </li>
             <li>
-              <a href="https://www.amazon.com/dp/1521382983" target="_blank">
+              <a href="https://www.amazon.com/dp/1521382983" target="_blank" rel="noreferrer">
                 ✈ The Complete Flight Attendant Handbook – Amber Ripp
               </a>
             </li>
             <li>
-              <a href="https://www.amazon.com/dp/1857883948" target="_blank">
+              <a href="https://www.amazon.com/dp/1857883948" target="_blank" rel="noreferrer">
                 ✈ The Perfect CV For Cabin Crew – Louise Newlove
               </a>
             </li>
             <li>
-              <a href="https://www.amazon.com/dp/8891804110" target="_blank">
+              <a href="https://www.amazon.com/dp/8891804110" target="_blank" rel="noreferrer">
                 ✈ Safety & Emergency Procedures Manual – IATA Guide
               </a>
             </li>
             <li>
-              <a href="https://www.amazon.com/dp/152030691X" target="_blank">
+              <a href="https://www.amazon.com/dp/152030691X" target="_blank" rel="noreferrer">
                 ✈ Aviation English for International Cabin Crew – Oxford
               </a>
             </li>
