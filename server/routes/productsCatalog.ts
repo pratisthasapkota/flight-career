@@ -5,24 +5,30 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { products } from "../db/schema.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { verifyAdmin } from "../utils/requireAdmin.js";
 
 const router = Router();
 
 const productSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  category: z.string().min(1, "Category is required"),
-  price: z.union([z.string(), z.number()]).transform((v) => Number(v)),
-  image: z.string().min(1, "Image path is required"),
+  name: z.string().min(1, "Name is required").max(255),
+  category: z.string().min(1, "Category is required").max(100),
+  price: z
+    .union([z.string(), z.number()])
+    .transform((v) => Number(v))
+    .refine((v) => Number.isFinite(v) && v >= 0, "Price must be a valid number"),
+  image: z.string().min(1, "Image path is required").max(500),
   rating: z
     .union([z.string(), z.number()])
     .optional()
-    .transform((v) => (v === undefined ? 4.5 : Number(v))),
+    .transform((v) => (v === undefined ? 4.5 : Number(v)))
+    .refine((v) => Number.isFinite(v) && v >= 0 && v <= 5, "Rating must be between 0 and 5"),
   reviews: z
     .union([z.string(), z.number()])
     .optional()
-    .transform((v) => (v === undefined ? 0 : Number(v))),
-  badge: z.string().optional().nullable(),
-  description: z.string().optional().nullable(),
+    .transform((v) => (v === undefined ? 0 : Number(v)))
+    .refine((v) => Number.isInteger(v) && v >= 0, "Reviews must be a non-negative integer"),
+  badge: z.string().max(100).optional().nullable(),
+  description: z.string().max(5000).optional().nullable(),
   sizes: z
     .union([z.array(z.string()), z.string()])
     .optional()
@@ -33,7 +39,8 @@ const productSchema = z.object({
   stock: z
     .union([z.string(), z.number()])
     .optional()
-    .transform((v) => (v === undefined ? 0 : Number(v))),
+    .transform((v) => (v === undefined ? 0 : Number(v)))
+    .refine((v) => Number.isInteger(v) && v >= 0, "Stock must be a non-negative integer"),
   active: z
     .union([z.boolean(), z.string()])
     .optional()
@@ -61,6 +68,11 @@ router.get(
   "/:id",
   asyncHandler(async (req: Request, res: Response) => {
     const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid product id" });
+    }
     const rows = await db
       .select()
       .from(products)
@@ -85,6 +97,7 @@ router.get(
 
 router.post(
   "/seed",
+  verifyAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const existing = await db.select().from(products);
     if (existing.length > 0) {
@@ -119,6 +132,7 @@ router.post(
 
 router.post(
   "/",
+  verifyAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const parsed = productSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -142,8 +156,14 @@ router.post(
 
 router.put(
   "/:id",
+  verifyAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid product id" });
+    }
     const parsed = productSchema.safeParse(req.body);
     if (!parsed.success) {
       return res
@@ -172,8 +192,14 @@ router.put(
 
 router.delete(
   "/:id",
+  verifyAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid product id" });
+    }
     await db.delete(products).where(eq(products.id, id));
     res.json({ success: true, message: "Product deleted" });
   })

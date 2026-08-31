@@ -1,1 +1,296 @@
-import { Router } from "express";import type { Request, Response } from "express";import { z } from "zod";import { eq, ilike } from "drizzle-orm";import { db } from "../db/index.js";import { vacancy, vacancyApplication } from "../db/schema.js";import { asyncHandler } from "../utils/asyncHandler.js";const router = Router();const vacancySchema = z.object({  title: z.string().min(1),  salary: z.string().min(1),  role: z.string().min(1),  skills: z.string().optional(),  responsibilities: z.string().optional(),  location: z.string().optional(),  deadline: z.string().optional(),});const vacancyApplySchema = z.object({  name: z.string().min(1, "Name is required"),  email: z.string().email("Invalid email"),  phone: z.string().min(1, "Phone is required"),  coverLetter: z.string().optional(),});router.get(  "/",  asyncHandler(async (req: Request, res: Response) => {    const { role } = req.query;    let results;    if (role && role !== "All") {      results = await db        .select()        .from(vacancy)        .where(ilike(vacancy.role, String(role)));    } else {      results = await db.select().from(vacancy);    }    res.json({ success: true, data: results });  }));router.get(  "/:id",  asyncHandler(async (req: Request, res: Response) => {    const id = parseInt(String(req.params.id), 10);    const results = await db      .select()      .from(vacancy)      .where(eq(vacancy.id, id));    if (results.length === 0) {      return res        .status(404)        .json({ success: false, message: "Vacancy not found" });    }    res.json({ success: true, data: results[0] });  }));router.post(  "/",  asyncHandler(async (req: Request, res: Response) => {    const parsed = vacancySchema.safeParse(req.body);    if (!parsed.success) {      return res        .status(400)        .json({ success: false, message: parsed.error.issues[0].message });    }    const result = await db      .insert(vacancy)      .values(parsed.data)      .returning();    res.status(201).json({ success: true, data: result[0] });  }));router.put(  "/:id",  asyncHandler(async (req: Request, res: Response) => {    const id = parseInt(String(req.params.id), 10);    const parsed = vacancySchema.safeParse(req.body);    if (!parsed.success) {      return res        .status(400)        .json({ success: false, message: parsed.error.issues[0].message });    }    const existing = await db      .select()      .from(vacancy)      .where(eq(vacancy.id, id));    if (existing.length === 0) {      return res        .status(404)        .json({ success: false, message: "Vacancy not found" });    }    const result = await db      .update(vacancy)      .set(parsed.data)      .where(eq(vacancy.id, id))      .returning();    res.json({ success: true, data: result[0] });  }));router.delete(  "/:id",  asyncHandler(async (req: Request, res: Response) => {    const id = parseInt(String(req.params.id), 10);    const existing = await db      .select()      .from(vacancy)      .where(eq(vacancy.id, id));    if (existing.length === 0) {      return res        .status(404)        .json({ success: false, message: "Vacancy not found" });    }    await db      .delete(vacancyApplication)      .where(eq(vacancyApplication.vacancyId, id));    await db.delete(vacancy).where(eq(vacancy.id, id));    res.json({ success: true, message: "Vacancy deleted" });  }));router.post(  "/seed",  asyncHandler(async (req: Request, res: Response) => {    const existing = await db.select().from(vacancy);    if (existing.length > 0) {      return res.json({ success: true, message: "Vacancies already seeded" });    }    const seeds = [      {        title: "Cabin Crew - Qatar Airways",        salary: "$2,500 - $4,000/mo",        role: "Cabin Crew",        skills: "Excellent communication skills,Customer service proficiency,Crisis management ability,Cultural awareness and sensitivity,Teamwork and collaboration",        responsibilities: "Ensure passenger safety and comfort during flights,Perform pre-flight safety checks,Serve meals and beverages,Handle emergency situations calmly,Assist passengers with special needs,Enforce airline safety regulations",        location: "Doha, Qatar",        deadline: "Mar 30, 2027",      },      {        title: "Flight Attendant - Emirates",        salary: "$3,000 - $5,000/mo",        role: "Cabin Crew",        skills: "Multilingual communication,First aid certification,Conflict resolution,Attention to detail,Adaptability under pressure",        responsibilities: "Welcome and assist passengers on board,Deliver high-quality in-flight service,Manage in-flight inventory,Conduct safety demonstrations,Provide first aid when required,Maintain cleanliness of cabin area",        location: "Dubai, UAE",        deadline: "Apr 15, 2027",      },      {        title: "Pilot - Singapore Airlines",        salary: "$8,000 - $15,000/mo",        role: "Pilot",        skills: "ATPL license,Instrument rating,Minimum 3000 flight hours,Strong situational awareness,Decision-making under pressure,Technical aircraft knowledge",        responsibilities: "Operate aircraft safely during all flight phases,Conduct pre-flight and post-flight inspections,Communicate with air traffic control,Monitor weather and flight systems,Ensure compliance with aviation regulations,File flight plans and maintain logs",        location: "Singapore",        deadline: "May 10, 2027",      },      {        title: "Aircraft Maintenance Engineer - Lufthansa Technik",        salary: "$4,500 - $7,000/mo",        role: "Maintenance",        skills: "EASA Part-66 license,Knowledge of avionics systems,Diagnostic and troubleshooting skills,Manual dexterity,Attention to detail,Read technical schematics",        responsibilities: "Inspect and maintain aircraft structures,Diagnose mechanical and electrical faults,Repair and replace defective components,Perform routine scheduled maintenance,Document all maintenance activities,Ensure airworthiness of aircraft",        location: "Hamburg, Germany",        deadline: "Apr 30, 2027",      },      {        title: "Ground Operations Manager - AirAsia",        salary: "$2,000 - $3,500/mo",        role: "Ground Staff",        skills: "Airport operations knowledge,Leadership and team management,Problem-solving skills,Knowledge of ground handling procedures,Strong organizational skills",        responsibilities: "Oversee daily ground operations,Coordinate baggage handling and ramp services,Manage ground crew schedules,Ensure safety and compliance standards,Handle irregular operations and diversions,Liaise with airline operations center",        location: "Kuala Lumpur, Malaysia",        deadline: "Mar 20, 2027",      },      {        title: "Air Traffic Controller - NATS",        salary: "$6,000 - $10,000/mo",        role: "ATC",        skills: "ICAO English proficiency,Excellent spatial awareness,High concentration levels,Rapid decision-making,Calm under pressure,Strong mathematical aptitude",        responsibilities: "Guide aircraft during takeoff and landing,Monitor airspace for potential conflicts,Provide weather and navigation information,Coordinate with adjacent control units,Issue clearances to pilots,Maintain radar and communication equipment",        location: "London, UK",        deadline: "Jun 01, 2027",      },      {        title: "Aviation Safety Inspector - FAA",        salary: "$5,500 - $8,500/mo",        role: "Safety",        skills: "Aviation safety regulations knowledge,Regulatory compliance experience,Strong analytical skills,Report writing proficiency,Investigation techniques",        responsibilities: "Conduct safety audits and inspections,Investigate incidents and accidents,Review safety management systems,Ensure regulatory compliance,Recommend corrective actions,Prepare detailed safety reports",        location: "Washington, USA",        deadline: "May 30, 2027",      },      {        title: "Airport Manager - Heathrow",        salary: "$7,000 - $11,000/mo",        role: "Management",        skills: "Airport operations management,Financial planning and budgeting,Stakeholder management,Risk assessment,Crisis management,Regulatory knowledge",        responsibilities: "Oversee all airport operations,Manage budgets and financial performance,Ensure compliance with aviation regulations,Lead safety and security initiatives,Coordinate with airlines and tenants,Develop operational improvement strategies",        location: "London, UK",        deadline: "Apr 20, 2027",      },    ];    await db.insert(vacancy).values(seeds);    res.json({ success: true, message: "Vacancies seeded successfully" });  }));router.post(  "/:id/apply",  asyncHandler(async (req: Request, res: Response) => {    const parsed = vacancyApplySchema.safeParse(req.body);    if (!parsed.success) {      return res        .status(400)        .json({ success: false, message: parsed.error.issues[0].message });    }    const vacancyId = parseInt(String(req.params.id), 10);    const { name, email, phone, coverLetter } = parsed.data;    const vResults = await db      .select()      .from(vacancy)      .where(eq(vacancy.id, vacancyId));    if (vResults.length === 0) {      return res        .status(404)        .json({ success: false, message: "Vacancy not found" });    }    const deadline = vResults[0].deadline;    if (deadline) {      const deadlineDate = new Date(deadline);      if (!isNaN(deadlineDate.getTime())) {        const endOfDeadlineDay = new Date(deadlineDate);        endOfDeadlineDay.setHours(23, 59, 59, 999);        if (endOfDeadlineDay.getTime() < Date.now()) {          return res.status(400).json({            success: false,            message:              "This vacancy is closed — the application deadline has already passed.",          });        }      }    }    const now = new Date();    const createdAt = now.toISOString();    const result = await db      .insert(vacancyApplication)      .values({        vacancyId,        name,        email,        phone,        coverLetter: coverLetter || null,        createdAt,      })      .returning();    res.json({ success: true, data: result[0] });  }));export default router;
+import { Router } from "express";
+import type { Request, Response } from "express";
+import { z } from "zod";
+import { eq, ilike } from "drizzle-orm";
+import { db } from "../db/index.js";
+import { vacancy, vacancyApplication } from "../db/schema.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+import { verifyAdmin } from "../utils/requireAdmin.js";
+
+const router = Router();
+
+const vacancySchema = z.object({
+  title: z.string().min(1).max(255),
+  salary: z.string().min(1).max(100),
+  role: z.string().min(1).max(100),
+  skills: z.string().max(5000).optional(),
+  responsibilities: z.string().max(5000).optional(),
+  location: z.string().max(255).optional(),
+  deadline: z.string().max(100).optional(),
+});
+
+const vacancyApplySchema = z.object({
+  name: z.string().min(1, "Name is required").max(255),
+  email: z.string().email("Invalid email").max(255),
+  phone: z.string().min(1, "Phone is required").max(50),
+  coverLetter: z.string().max(5000).optional(),
+});
+
+router.get(
+  "/",
+  asyncHandler(async (req: Request, res: Response) => {
+    const { role } = req.query;
+    let results;
+    if (role && role !== "All") {
+      results = await db
+        .select()
+        .from(vacancy)
+        .where(ilike(vacancy.role, String(role)));
+    } else {
+      results = await db.select().from(vacancy);
+    }
+    res.json({ success: true, data: results });
+  })
+);
+
+router.get(
+  "/:id",
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = parseInt(String(req.params.id), 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid vacancy id" });
+    }
+    const results = await db
+      .select()
+      .from(vacancy)
+      .where(eq(vacancy.id, id));
+    if (results.length === 0) {
+      return res.status(404).json({ success: false, message: "Vacancy not found" });
+    }
+    res.json({ success: true, data: results[0] });
+  })
+);
+
+router.post(
+  "/",
+  verifyAdmin,
+  asyncHandler(async (req: Request, res: Response) => {
+    const parsed = vacancySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ success: false, message: parsed.error.issues[0].message });
+    }
+    const result = await db.insert(vacancy).values(parsed.data).returning();
+    res.status(201).json({ success: true, data: result[0] });
+  })
+);
+
+router.put(
+  "/:id",
+  verifyAdmin,
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = parseInt(String(req.params.id), 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid vacancy id" });
+    }
+    const parsed = vacancySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ success: false, message: parsed.error.issues[0].message });
+    }
+    const existing = await db
+      .select()
+      .from(vacancy)
+      .where(eq(vacancy.id, id));
+    if (existing.length === 0) {
+      return res.status(404).json({ success: false, message: "Vacancy not found" });
+    }
+    const result = await db
+      .update(vacancy)
+      .set(parsed.data)
+      .where(eq(vacancy.id, id))
+      .returning();
+    res.json({ success: true, data: result[0] });
+  })
+);
+
+router.delete(
+  "/:id",
+  verifyAdmin,
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = parseInt(String(req.params.id), 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid vacancy id" });
+    }
+    const existing = await db
+      .select()
+      .from(vacancy)
+      .where(eq(vacancy.id, id));
+    if (existing.length === 0) {
+      return res.status(404).json({ success: false, message: "Vacancy not found" });
+    }
+    await db
+      .delete(vacancyApplication)
+      .where(eq(vacancyApplication.vacancyId, id));
+    await db.delete(vacancy).where(eq(vacancy.id, id));
+    res.json({ success: true, message: "Vacancy deleted" });
+  })
+);
+
+router.post(
+  "/seed",
+  verifyAdmin,
+  asyncHandler(async (req: Request, res: Response) => {
+    const existing = await db.select().from(vacancy);
+    if (existing.length > 0) {
+      return res.json({ success: true, message: "Vacancies already seeded" });
+    }
+
+    const seeds = [
+      {
+        title: "Cabin Crew - Qatar Airways",
+        salary: "$2,500 - $4,000/mo",
+        role: "Cabin Crew",
+        skills:
+          "Excellent communication skills,Customer service proficiency,Crisis management ability,Cultural awareness and sensitivity,Teamwork and collaboration",
+        responsibilities:
+          "Ensure passenger safety and comfort during flights,Perform pre-flight safety checks,Serve meals and beverages,Handle emergency situations calmly,Assist passengers with special needs,Enforce airline safety regulations",
+        location: "Doha, Qatar",
+        deadline: "Mar 30, 2027",
+      },
+      {
+        title: "Flight Attendant - Emirates",
+        salary: "$3,000 - $5,000/mo",
+        role: "Cabin Crew",
+        skills:
+          "Multilingual communication,First aid certification,Conflict resolution,Attention to detail,Adaptability under pressure",
+        responsibilities:
+          "Welcome and assist passengers on board,Deliver high-quality in-flight service,Manage in-flight inventory,Conduct safety demonstrations,Provide first aid when required,Maintain cleanliness of cabin area",
+        location: "Dubai, UAE",
+        deadline: "Apr 15, 2027",
+      },
+      {
+        title: "Pilot - Singapore Airlines",
+        salary: "$8,000 - $15,000/mo",
+        role: "Pilot",
+        skills:
+          "ATPL license,Instrument rating,Minimum 3000 flight hours,Strong situational awareness,Decision-making under pressure,Technical aircraft knowledge",
+        responsibilities:
+          "Operate aircraft safely during all flight phases,Conduct pre-flight and post-flight inspections,Communicate with air traffic control,Monitor weather and flight systems,Ensure compliance with aviation regulations,File flight plans and maintain logs",
+        location: "Singapore",
+        deadline: "May 10, 2027",
+      },
+      {
+        title: "Aircraft Maintenance Engineer - Lufthansa Technik",
+        salary: "$4,500 - $7,000/mo",
+        role: "Maintenance",
+        skills:
+          "EASA Part-66 license,Knowledge of avionics systems,Diagnostic and troubleshooting skills,Manual dexterity,Attention to detail,Read technical schematics",
+        responsibilities:
+          "Inspect and maintain aircraft structures,Diagnose mechanical and electrical faults,Repair and replace defective components,Perform routine scheduled maintenance,Document all maintenance activities,Ensure airworthiness of aircraft",
+        location: "Hamburg, Germany",
+        deadline: "Apr 30, 2027",
+      },
+      {
+        title: "Ground Operations Manager - AirAsia",
+        salary: "$2,000 - $3,500/mo",
+        role: "Ground Staff",
+        skills:
+          "Airport operations knowledge,Leadership and team management,Problem-solving skills,Knowledge of ground handling procedures,Strong organizational skills",
+        responsibilities:
+          "Oversee daily ground operations,Coordinate baggage handling and ramp services,Manage ground crew schedules,Ensure safety and compliance standards,Handle irregular operations and diversions,Liaise with airline operations center",
+        location: "Kuala Lumpur, Malaysia",
+        deadline: "Mar 20, 2027",
+      },
+      {
+        title: "Air Traffic Controller - NATS",
+        salary: "$6,000 - $10,000/mo",
+        role: "ATC",
+        skills:
+          "ICAO English proficiency,Excellent spatial awareness,High concentration levels,Rapid decision-making,Calm under pressure,Strong mathematical aptitude",
+        responsibilities:
+          "Guide aircraft during takeoff and landing,Monitor airspace for potential conflicts,Provide weather and navigation information,Coordinate with adjacent control units,Issue clearances to pilots,Maintain radar and communication equipment",
+        location: "London, UK",
+        deadline: "Jun 01, 2027",
+      },
+      {
+        title: "Aviation Safety Inspector - FAA",
+        salary: "$5,500 - $8,500/mo",
+        role: "Safety",
+        skills:
+          "Aviation safety regulations knowledge,Regulatory compliance experience,Strong analytical skills,Report writing proficiency,Investigation techniques",
+        responsibilities:
+          "Conduct safety audits and inspections,Investigate incidents and accidents,Review safety management systems,Ensure regulatory compliance,Recommend corrective actions,Prepare detailed safety reports",
+        location: "Washington, USA",
+        deadline: "May 30, 2027",
+      },
+      {
+        title: "Airport Manager - Heathrow",
+        salary: "$7,000 - $11,000/mo",
+        role: "Management",
+        skills:
+          "Airport operations management,Financial planning and budgeting,Stakeholder management,Risk assessment,Crisis management,Regulatory knowledge",
+        responsibilities:
+          "Oversee all airport operations,Manage budgets and financial performance,Ensure compliance with aviation regulations,Lead safety and security initiatives,Coordinate with airlines and tenants,Develop operational improvement strategies",
+        location: "London, UK",
+        deadline: "Apr 20, 2027",
+      },
+    ];
+
+    await db.insert(vacancy).values(seeds);
+    res.json({ success: true, message: "Vacancies seeded successfully" });
+  })
+);
+
+router.post(
+  "/:id/apply",
+  asyncHandler(async (req: Request, res: Response) => {
+    const parsed = vacancyApplySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ success: false, message: parsed.error.issues[0].message });
+    }
+    const vacancyId = parseInt(String(req.params.id), 10);
+    if (!Number.isInteger(vacancyId) || vacancyId <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid vacancy id" });
+    }
+    const { name, email, phone, coverLetter } = parsed.data;
+    const vResults = await db
+      .select()
+      .from(vacancy)
+      .where(eq(vacancy.id, vacancyId));
+    if (vResults.length === 0) {
+      return res.status(404).json({ success: false, message: "Vacancy not found" });
+    }
+    const deadline = vResults[0].deadline;
+    if (deadline) {
+      const deadlineDate = new Date(deadline);
+      if (!isNaN(deadlineDate.getTime())) {
+        const endOfDeadlineDay = new Date(deadlineDate);
+        endOfDeadlineDay.setHours(23, 59, 59, 999);
+        if (endOfDeadlineDay.getTime() < Date.now()) {
+          return res.status(400).json({
+            success: false,
+            message: "This vacancy is closed - the application deadline has already passed.",
+          });
+        }
+      }
+    }
+    const createdAt = new Date().toISOString();
+    const result = await db
+      .insert(vacancyApplication)
+      .values({
+        vacancyId,
+        name,
+        email,
+        phone,
+        coverLetter: coverLetter || null,
+        createdAt,
+      })
+      .returning();
+    res.json({ success: true, data: result[0] });
+  })
+);
+
+export default router;

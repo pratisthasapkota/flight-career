@@ -8,11 +8,11 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 const router = Router();
 
 const interestSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  email: z.string().email("Invalid email"),
-  phone: z.string().min(1, "Phone is required"),
-  role: z.string().min(1, "Role is required"),
-  message: z.string().optional(),
+  name: z.string().min(1, "Name is required").max(255),
+  email: z.string().email("Invalid email").max(255),
+  phone: z.string().min(1, "Phone is required").max(50),
+  role: z.string().min(1, "Role is required").max(100),
+  message: z.string().max(5000).optional(),
 });
 
 router.post(

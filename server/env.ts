@@ -1,6 +1,10 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+if (process.env.ADMIN_PASSWORD_HASH) {
+  process.env.ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH.replace(/\$\$/g, "$");
+}
+
 const REQUIRED_IN_PROD = [
   "SESSION_SECRET",
   "JWT_SECRET",

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { NextFunction, Request, Response } from "express";
+import type { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { z } from "zod";
@@ -14,6 +14,10 @@ import {
   employeeInterest,
 } from "../db/schema.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { verifyAdmin } from "../utils/requireAdmin.js";
+import { sendEmail } from "../email.js";
+
+const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
 
 const router = Router();
 
@@ -24,40 +28,6 @@ const adminLoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
-
-const verifyAdmin = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void => {
-  const header = req.headers.authorization || "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
-  if (!token) {
-    res.status(401).json({ success: false, message: "Unauthorized" });
-    return;
-  }
-  try {
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET as string
-    ) as jwt.JwtPayload & { role?: string };
-    if (decoded.role !== "admin") {
-      res.status(403).json({ success: false, message: "Forbidden" });
-      return;
-    }
-    req.admin = {
-      email: String(decoded.email || ""),
-      role: decoded.role || "admin",
-      iat: decoded.iat,
-      exp: decoded.exp,
-    };
-    next();
-  } catch (err) {
-    res
-      .status(401)
-      .json({ success: false, message: "Invalid or expired token" });
-  }
-};
 
 const serializeOrder = (r: typeof product.$inferSelect) => ({
   id: r.id,
@@ -171,6 +141,91 @@ router.get(
         })),
       },
     });
+  })
+);
+
+router.post(
+  "/users/:id/resend-verification",
+  verifyAdmin,
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid user id" });
+    }
+
+    const result = await db.select().from(login).where(eq(login.id, id));
+    if (result.length === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    const user = result[0];
+    if (user.verified) {
+      return res
+        .status(400)
+        .json({ success: false, message: "User is already verified" });
+    }
+
+    const token = jwt.sign(
+      { email: user.email },
+      process.env.JWT_SECRET as string,
+      { expiresIn: "1d" }
+    );
+    const verifyURL = `${BACKEND_URL}/api/verify/${token}`;
+
+    await db
+      .update(login)
+      .set({ verificationlink: token })
+      .where(eq(login.id, id));
+
+    await sendEmail(req, {
+      from: process.env.EMAIL_USER,
+      to: user.email,
+      subject: "Verify your email address",
+      html: `<h2>Hi there!</h2>
+             <p>Please confirm your email address by clicking the link below:</p>
+             <a href="${verifyURL}">${verifyURL}</a>
+             <p>This link will expire in 24 hours.</p>`,
+    });
+
+    res.json({ success: true, message: "Verification email sent" });
+  })
+);
+
+router.delete(
+  "/users/:id",
+  verifyAdmin,
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid user id" });
+    }
+
+    const target = await db.select().from(login).where(eq(login.id, id));
+    if (target.length === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    const deleteUserId = target[0].id;
+
+    const targetEmail = target[0].email.toLowerCase();
+    const requesterEmail = String(req.admin?.email || "").toLowerCase();
+    if (targetEmail === requesterEmail) {
+      return res
+        .status(400)
+        .json({ success: false, message: "You cannot delete your own admin account" });
+    }
+
+    await db.delete(login).where(eq(login.id, deleteUserId));
+
+    res.json({ success: true, message: "User deleted successfully" });
   })
 );
 

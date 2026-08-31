@@ -37,8 +37,7 @@
 .third:hover,
 .sixth:hover,
 .nav-btn:hover {
-  border: 2px solid rgb(198, 85, 85),
-
+  border: 2px solid rgb(198, 85, 85);
 }
 .nine {
  border: none;

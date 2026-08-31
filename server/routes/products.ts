@@ -9,27 +9,34 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 
 const router = Router();
 
-const orderSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  email: z.string().email("Invalid email"),
-  address: z.string().min(1, "Address is required"),
-  city: z.string().min(1, "City is required"),
-  postalCode: z.string().min(1, "Postal code is required"),
-  phone: z.string().min(1, "Phone is required"),
-  items: z
-    .array(
-      z.object({
-        productId: z.number().int().positive().optional().nullable(),
-        productname: z.string().min(1, "Product name is required"),
-        quantity: z
-          .union([z.string(), z.number()])
-          .refine((v) => Number(v) >= 1, "Quantity must be at least 1"),
-        price: z.union([z.string(), z.number()]).optional().nullable(),
-        size: z.string().optional().nullable(),
-      })
-    )
-    .min(1, "Order must contain at least one item"),
+const orderItemSchema = z.object({
+  productId: z.number().int().positive().optional().nullable(),
+  productname: z.string().min(1, "Product name is required").max(255),
+  quantity: z
+    .union([z.string(), z.number()])
+    .transform((v) => Number(v))
+    .refine((v) => Number.isInteger(v) && v >= 1 && v <= 100, "Quantity must be between 1 and 100"),
+  price: z.union([z.string(), z.number()]).optional().nullable(),
+  size: z.string().max(50).optional().nullable(),
 });
+
+const orderSchema = z.object({
+  name: z.string().min(1, "Name is required").max(255),
+  email: z.string().email("Invalid email").max(255),
+  address: z.string().min(1, "Address is required").max(500),
+  city: z.string().min(1, "City is required").max(100),
+  postalCode: z.string().min(1, "Postal code is required").max(20),
+  phone: z.string().min(1, "Phone is required").max(50),
+  items: z.array(orderItemSchema).min(1, "Order must contain at least one item").max(20),
+});
+
+const escapeHtml = (s: string): string =>
+  s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
 router.post(
   "/",
@@ -70,55 +77,94 @@ router.post(
       Math.random().toString(36).slice(2, 6).toUpperCase();
     const orderDate = new Date().toISOString();
 
-    const saved: { productName: string; quantity: number; unitPrice: number; size: string }[] =
-      [];
-    for (const item of items) {
-      const quantity = Number(item.quantity);
-      const unitPrice = Number(item.price ?? 0);
+    type SavedItem = { productName: string; quantity: number; unitPrice: number; size: string };
 
-      const row = await db
-        .insert(product)
-        .values({
-          name,
-          email,
-          address,
-          city,
-          postalcode: postalCode,
-          phone,
-          quantity: String(quantity),
-          productName: item.productname,
-          price: String(unitPrice),
-          size: item.size || "One Size",
-          orderId,
-          orderDate,
-          status: "Pending",
-        })
-        .returning();
+    const saved: SavedItem[] = await db.transaction(async (tx) => {
+      const rows: SavedItem[] = [];
+      for (const item of items) {
+        const quantity = Number(item.quantity);
 
-      saved.push({
-        productName: row[0].productName || item.productname,
-        quantity,
-        unitPrice,
-        size: row[0].size || item.size || "One Size",
-      });
-
-      if (item.productId) {
-        try {
-          const found = await db
+        if (item.productId) {
+          const catalog = await tx
             .select()
             .from(products)
             .where(eq(products.id, item.productId));
-          if (found.length && (found[0].stock ?? 0) > 0) {
-            await db
-              .update(products)
-              .set({ stock: Math.max(0, (found[0].stock ?? 0) - quantity) })
-              .where(eq(products.id, item.productId));
+          if (catalog.length === 0 || catalog[0].active === false) {
+            throw new Error("Product is no longer available");
           }
-        } catch (err) {
-          console.error("Stock update failed:", (err as Error).message);
+          const stock = catalog[0].stock ?? 0;
+          if (stock <= 0) {
+            throw new Error(`${catalog[0].name} is out of stock`);
+          }
+          if (quantity > stock) {
+            throw new Error(`Only ${stock} units of ${catalog[0].name} are available`);
+          }
+
+          const unitPrice = Number(catalog[0].price || 0);
+          const row = await tx
+            .insert(product)
+            .values({
+              name,
+              email,
+              address,
+              city,
+              postalcode: postalCode,
+              phone,
+              quantity: String(quantity),
+              productName: item.productname,
+              price: String(unitPrice),
+              size: item.size || "One Size",
+              orderId,
+              orderDate,
+              status: "Pending",
+            })
+            .returning();
+
+          await tx
+            .update(products)
+            .set({ stock: stock - quantity })
+            .where(eq(products.id, item.productId));
+
+          rows.push({
+            productName: item.productname,
+            quantity,
+            unitPrice,
+            size: row[0].size || item.size || "One Size",
+          });
+        } else {
+          const unitPrice = Number(item.price ?? 0);
+          if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+            throw new Error("Invalid price for custom item");
+          }
+          await tx
+            .insert(product)
+            .values({
+              name,
+              email,
+              address,
+              city,
+              postalcode: postalCode,
+              phone,
+              quantity: String(quantity),
+              productName: item.productname,
+              price: String(unitPrice),
+              size: item.size || "One Size",
+              orderId,
+              orderDate,
+              status: "Pending",
+            })
+            .returning();
+
+          rows.push({
+            productName: item.productname,
+            quantity,
+            unitPrice,
+            size: item.size || "One Size",
+          });
         }
       }
-    }
+      return rows;
+    });
 
     const subtotal = saved.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
     const shipping = subtotal >= 150 ? 0 : 9.99;
@@ -128,14 +174,16 @@ router.post(
       from: process.env.EMAIL_USER,
       to: email,
       subject: `Order Confirmation ${orderId}`,
-      html: `<h2>Hello ${name},</h2>
-             <p>Thank you for your order <b>${orderId}</b>.</p>
+      html: `<h2>Hello ${escapeHtml(name)},</h2>
+             <p>Thank you for your order <b>${escapeHtml(orderId)}</b>.</p>
              <table border="1" cellpadding="6" cellspacing="0">
                <tr><th>Product</th><th>Size</th><th>Qty</th><th>Price</th><th>Total</th></tr>
                ${saved
                  .map(
                    (i) =>
-                     `<tr><td>${i.productName}</td><td>${i.size}</td><td>${i.quantity}</td><td>$${i.unitPrice.toFixed(
+                     `<tr><td>${escapeHtml(i.productName)}</td><td>${escapeHtml(
+                       i.size
+                     )}</td><td>${i.quantity}</td><td>$${i.unitPrice.toFixed(
                        2
                      )}</td><td>$${(i.unitPrice * i.quantity).toFixed(2)}</td></tr>`
                  )
@@ -145,7 +193,9 @@ router.post(
              <b>Shipping:</b> ${shipping === 0 ? "Free" : "$" + shipping.toFixed(2)}<br/>
              <b>Tax:</b> $${tax.toFixed(2)}<br/>
              <b>Total:</b> $${(subtotal + shipping + tax).toFixed(2)}</p>
-             <p><b>Ship to:</b> ${address}, ${city} ${postalCode}</p>`,
+             <p><b>Ship to:</b> ${escapeHtml(address)}, ${escapeHtml(city)} ${escapeHtml(
+        postalCode
+      )}</p>`,
     });
 
     res.json({

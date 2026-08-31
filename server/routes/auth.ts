@@ -16,13 +16,16 @@ const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
 const JWT_SECRET = process.env.JWT_SECRET || "dev_jwt_secret_change_me";
 
 const signupSchema = z.object({
-  email: z.string().email("Invalid email"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  email: z.string().email("Invalid email").max(255),
+  password: z
+    .string()
+    .min(6, "Password must be at least 6 characters")
+    .max(128, "Password must be at most 128 characters"),
 });
 
 const loginSchema = z.object({
-  email: z.string().email("Invalid email"),
-  password: z.string().min(1, "Password is required"),
+  email: z.string().email("Invalid email").max(255),
+  password: z.string().min(1, "Password is required").max(128),
 });
 
 router.post(
@@ -36,10 +39,11 @@ router.post(
     }
 
     const { email, password } = parsed.data;
+    const normalizedEmail = email.toLowerCase();
     const existing = await db
       .select()
       .from(login)
-      .where(eq(login.email, email));
+      .where(eq(login.email, normalizedEmail));
     if (existing.length > 0) {
       return res
         .status(400)
@@ -47,19 +51,19 @@ router.post(
     }
 
     const hashed = await bcrypt.hash(password, 10);
-    const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: "1d" });
-    const verifyURL = `${BACKEND_URL}/verify/${token}`;
+    const token = jwt.sign({ email: normalizedEmail }, JWT_SECRET, { expiresIn: "1d" });
+    const verifyURL = `${BACKEND_URL}/api/verify/${token}`;
 
     await db.insert(login).values({
-      email,
+      email: normalizedEmail,
       password: hashed,
-      verified: true,
+      verified: false,
       verificationlink: token,
     });
 
     await sendEmail(req, {
       from: process.env.EMAIL_USER,
-      to: email,
+      to: normalizedEmail,
       subject: "Verify your email address",
       html: `<h2>Welcome!</h2>
              <p>Thanks for signing up. Please confirm your email address by clicking the link below:</p>
@@ -132,14 +136,15 @@ router.post(
     }
 
     const { email, password } = parsed.data;
+    const normalizedEmail = email.toLowerCase();
     const result = await db
       .select()
       .from(login)
-      .where(eq(login.email, email));
+      .where(eq(login.email, normalizedEmail));
     if (result.length === 0) {
       return res
         .status(401)
-        .json({ success: false, message: "Email not found" });
+        .json({ success: false, message: "Invalid email or password" });
     }
 
     const user = result[0];
@@ -153,7 +158,7 @@ router.post(
     if (!match) {
       return res
         .status(401)
-        .json({ success: false, message: "Incorrect password" });
+        .json({ success: false, message: "Invalid email or password" });
     }
 
     const token = jwt.sign({ email: user.email }, JWT_SECRET, {
