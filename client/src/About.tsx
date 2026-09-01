@@ -1,5 +1,6 @@
 import React from "react";
 import Navbar from "./Components/Navbar";
+import Footer from "./Components/Footer";
 
 interface Stat {
   number: string;
@@ -78,6 +79,21 @@ function About() {
 
       {/* Hero Header */}
       <div className="page-header animate-fadeInDown">
+        <span style={{
+          display: "inline-block",
+          background: "rgba(255,215,0,0.12)",
+          color: "#ffd700",
+          padding: "6px 18px",
+          borderRadius: "50px",
+          fontSize: "13px",
+          fontWeight: "600",
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          marginBottom: "18px",
+          border: "1px solid rgba(255,215,0,0.2)",
+        }}>
+          Our Story
+        </span>
         <h1>About Us</h1>
         <p>
           Empowering the next generation of aviation professionals with
@@ -102,7 +118,7 @@ function About() {
               provide the knowledge, skills, and industry connections to turn
               that dream into reality.
             </p>
-            <p style={{ marginTop: "12px" }}>
+            <p style={{ marginTop: "14px" }}>
               Founded by aviation veterans with decades of combined experience,
               our institute bridges the gap between ambition and achievement.
               We don't just train — we transform aspiring aviators into
@@ -324,6 +340,7 @@ function About() {
           </a>
         </div>
       </div>
+      <Footer />
     </div>
   );
 }

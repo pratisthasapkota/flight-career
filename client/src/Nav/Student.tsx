@@ -117,7 +117,7 @@ const Student: React.FC = () => {
         </div>
       </section>
 
-      <h2 className="section-title">Here's how I can help you:</h2>
+      <h2 className="help-section-title">Here's how I can help you:</h2>
 
       <div className="help-section">
         <div className="email-section">

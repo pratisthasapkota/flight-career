@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import Navbar from "../Components/Navbar";
 import Footer from "../Components/Footer";
 import axios from "axios";
+import { FiMail, FiPhone, FiMapPin, FiClock, FiSend } from "react-icons/fi";
 
 interface ContactForm {
   name: string;
@@ -59,187 +60,364 @@ const Contact: React.FC = () => {
     }
   };
 
+  const infoItems = [
+    { icon: <FiMail />, label: "Email", value: "info@cabincrew.edu.np", href: "mailto:info@cabincrew.edu.np" },
+    { icon: <FiPhone />, label: "Phone", value: "+977 9744341824", href: "tel:+9779744341824" },
+    { icon: <FiMapPin />, label: "Address", value: "AeroCareers Academy, Kathmandu, Nepal" },
+    { icon: <FiClock />, label: "Hours", value: "Mon – Fri, 9:00 AM – 6:00 PM" },
+  ];
+
   return (
     <>
       <Navbar />
       <style>{`
         .contact-page {
-          font-family: 'Poppins', sans-serif;
-          color: #1e1e1e;
-          background-color: #f5f7fb;
-          padding-bottom: 60px;
+          font-family: var(--font-sans);
+          color: var(--color-text-primary);
+          background-color: var(--color-surface-dim);
+          padding-bottom: 0;
         }
 
-        
         .contact-hero {
           text-align: center;
-          background: linear-gradient(to right, #002b5c, #00509e);
+          background: linear-gradient(160deg, #000d1f 0%, #002b5c 60%, #00509e 100%);
           color: white;
-          padding: 80px 20px;
-          border-radius: 0 0 60px 60px;
-          box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
-        }
-        .contact-hero h1 {
-          font-size: 3rem;
-          font-weight: 700;
-          margin-bottom: 15px;
-        }
-        .contact-hero p {
-          font-size: 1.2rem;
-          opacity: 0.9;
-          max-width: 700px;
-          margin: 0 auto;
+          padding: 90px 20px;
+          border-radius: 0 0 40px 40px;
+          position: relative;
+          overflow: hidden;
         }
 
-        .contact-section {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 60px;
-          margin-top: 60px;
-          width: 90%;
-          max-width: 1100px;
-          margin-left: auto;
-          margin-right: auto;
+        .contact-hero::before {
+          content: "";
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background:
+            radial-gradient(ellipse at 30% 20%, rgba(255, 215, 0, 0.08) 0%, transparent 50%),
+            radial-gradient(ellipse at 70% 80%, rgba(255, 255, 255, 0.03) 0%, transparent 50%);
         }
+
+        .contact-hero h1 {
+          font-size: 3rem;
+          font-weight: 800;
+          margin-bottom: 16px;
+          letter-spacing: -0.02em;
+          position: relative;
+        }
+
+        .contact-hero p {
+          font-size: 1.15rem;
+          opacity: 0.85;
+          max-width: 650px;
+          margin: 0 auto;
+          line-height: 1.7;
+          position: relative;
+        }
+
+        .contact-body {
+          max-width: 1150px;
+          margin: -30px auto 60px;
+          padding: 0 24px;
+          position: relative;
+          z-index: 2;
+          display: grid;
+          grid-template-columns: 1fr 1.1fr;
+          gap: 30px;
+          align-items: stretch;
+        }
+
         .contact-form {
           background: white;
           padding: 40px;
-          border-radius: 20px;
+          border-radius: var(--radius-xl);
           width: 100%;
-          box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+          box-shadow: var(--shadow-xl);
+          border: 1px solid var(--color-border);
         }
+
+        .contact-form h3 {
+          font-size: 1.5rem;
+          font-weight: 700;
+          margin-bottom: 8px;
+          letter-spacing: -0.01em;
+        }
+
+        .contact-form .form-subtitle {
+          color: var(--color-text-muted);
+          font-size: 14px;
+          margin-bottom: 24px;
+        }
+
+        .form-group {
+          margin-bottom: 16px;
+        }
+
         .contact-form input,
         .contact-form textarea,
         .contact-form select {
           width: 100%;
-          padding: 12px 15px;
-          margin: 10px 0;
-          border-radius: 10px;
-          border: 1px solid #ccc;
-          font-size: 1rem;
-        }
-        .contact-form textarea {
-          resize: vertical;
-          min-height: 120px;
-        }
-        .contact-form button {
-          background-color: #00509e;
-          color: white;
-          border: none;
-          padding: 12px 25px;
-          font-size: 1rem;
-          border-radius: 30px;
-          cursor: pointer;
-          transition: background 0.3s ease, transform 0.2s ease;
-        }
-        .contact-form button:hover {
-          background-color: #002b5c;
-          transform: scale(1.05);
+          padding: 13px 16px;
+          border-radius: var(--radius-md);
+          border: 1px solid var(--color-border);
+          font-size: 0.95rem;
+          font-family: var(--font-sans);
+          color: var(--color-text-primary);
+          background: var(--color-surface-dim);
+          transition: all var(--transition-fast);
+          outline: none;
         }
 
-        
+        .contact-form input:focus,
+        .contact-form textarea:focus,
+        .contact-form select:focus {
+          border-color: var(--color-navy-300);
+          background: white;
+          box-shadow: 0 0 0 3px rgba(0, 80, 158, 0.08);
+        }
+
+        .contact-form textarea {
+          resize: vertical;
+          min-height: 130px;
+        }
+
+        .contact-form select {
+          cursor: pointer;
+          appearance: none;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238896a6' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+          background-repeat: no-repeat;
+          background-position: right 16px center;
+          padding-right: 40px;
+        }
+
+        .contact-form button {
+          background: linear-gradient(135deg, var(--color-navy-400), var(--color-navy-600));
+          color: white;
+          border: none;
+          padding: 14px 30px;
+          font-size: 15px;
+          font-weight: 600;
+          border-radius: var(--radius-full);
+          cursor: pointer;
+          transition: all var(--transition-base);
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          font-family: var(--font-sans);
+          margin-top: 8px;
+          box-shadow: var(--shadow-md);
+        }
+
+        .contact-form button:hover {
+          background: linear-gradient(135deg, var(--color-navy-600), var(--color-navy-800));
+          transform: translateY(-2px);
+          box-shadow: var(--shadow-lg);
+        }
+
+        .contact-form button:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          transform: none;
+        }
+
         .contact-info {
           display: flex;
           flex-direction: column;
-          gap: 20px;
-          text-align: center;
+          gap: 16px;
         }
-        .contact-info div {
+
+        .info-card {
+          background: white;
+          border-radius: var(--radius-lg);
+          padding: 22px 24px;
+          border: 1px solid var(--color-border);
+          box-shadow: var(--shadow-sm);
+          display: flex;
+          align-items: center;
+          gap: 18px;
+          transition: all var(--transition-base);
+        }
+
+        .info-card:hover {
+          transform: translateY(-3px);
+          box-shadow: var(--shadow-md);
+          border-color: rgba(0, 80, 158, 0.15);
+        }
+
+        .info-icon {
+          width: 48px;
+          height: 48px;
+          min-width: 48px;
+          background: linear-gradient(135deg, var(--color-navy-400), var(--color-navy-600));
+          color: white;
+          border-radius: var(--radius-md);
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 10px;
-          font-size: 1.1rem;
+          font-size: 18px;
         }
 
-       
+        .info-label {
+          font-size: 12px;
+          color: var(--color-text-muted);
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          font-weight: 600;
+          margin-bottom: 3px;
+        }
+
+        .info-value {
+          font-size: 15px;
+          font-weight: 500;
+          color: var(--color-text-primary);
+        }
+
         .contact-map {
           width: 100%;
-          height: 350px;
-          border-radius: 20px;
+          height: 300px;
+          border-radius: var(--radius-xl);
+          overflow: hidden;
+          border: 1px solid var(--color-border);
+          box-shadow: var(--shadow-md);
+        }
+
+        .map-wrapper {
+          grid-column: 1 / -1;
+          margin-top: 10px;
+        }
+
+        .contact-footer {
+          text-align: center;
+          padding: 60px 24px;
+          background: linear-gradient(160deg, #000d1f 0%, #002b5c 100%);
+          color: white;
+          position: relative;
           overflow: hidden;
         }
 
-        
+        .contact-footer::before {
+          content: "";
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: radial-gradient(ellipse at 50% 0%, rgba(255, 215, 0, 0.06) 0%, transparent 50%);
+        }
 
-       
-        .contact-footer {
-          text-align: center;
-          margin-top: 60px;
-          padding: 50px 20px;
-          background: linear-gradient(to right, #00509e, #002b5c);
-          color: white;
-          border-radius: 30px;
+        .contact-footer h2 {
+          font-size: 2rem;
+          font-weight: 800;
+          margin-bottom: 10px;
+          letter-spacing: -0.01em;
+          position: relative;
         }
-       .contact-footer h2,.contact-footer p {
-          color:white;
+
+        .contact-footer p {
+          color: rgba(200, 214, 229, 0.85);
+          font-size: 16px;
+          position: relative;
         }
-        
+
         @media (max-width: 900px) {
-          .contact-section {
-            width: 95%;
+          .contact-body {
+            grid-template-columns: 1fr;
+            margin-top: -20px;
+            padding: 0 16px;
+          }
+
+          .contact-form {
+            padding: 28px 24px;
+          }
+
+          .contact-hero h1 {
+            font-size: 2.2rem;
+          }
+
+          .map-wrapper {
+            grid-column: auto;
           }
         }
       `}</style>
 
       <div className="contact-page">
-        
         <header className="contact-hero">
-          <h1>Get in Touch with Us</h1>
+          <h1>Get in Touch</h1>
           <p>
             Have questions, feedback, or suggestions? Our team is ready to assist you. Reach out through any of the channels below.
           </p>
         </header>
 
-        
-        <section className="contact-section">
-          <form className="contact-form" onSubmit={handleSubmit}>
-            <input
-              type="text"
-              name="name"
-              placeholder="Your Name"
-              value={form.name}
-              onChange={handleChange}
-              required
-            />
-            <input
-              type="email"
-              name="email"
-              placeholder="Your Email"
-              value={form.email}
-              onChange={handleChange}
-              required
-            />
-            <input
-              type="tel"
-              name="phone"
-              placeholder="Your Phone (optional)"
-              value={form.phone}
-              onChange={handleChange}
-            />
-            <select name="role" value={form.role} onChange={handleChange}>
-              <option value="">Select Department</option>
-              <option value="Support">Support</option>
-              <option value="Training">Training</option>
-              <option value="Careers">Careers</option>
-              <option value="Feedback">Feedback</option>
-            </select>
-            <textarea
-              name="message"
-              placeholder="Your Message"
-              value={form.message}
-              onChange={handleChange}
-              required
-            ></textarea>
+        <div className="contact-body">
+          <form className="contact-form" onSubmit={handleSubmit} style={{ animation: "fadeInUp 0.6s ease forwards" }}>
+            <h3>Send us a message</h3>
+            <p className="form-subtitle">We usually respond within 24 hours</p>
+
+            <div className="form-group">
+              <input
+                type="text"
+                name="name"
+                placeholder="Your Name"
+                value={form.name}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <input
+                type="email"
+                name="email"
+                placeholder="Your Email"
+                value={form.email}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <input
+                type="tel"
+                name="phone"
+                placeholder="Your Phone (optional)"
+                value={form.phone}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <select name="role" value={form.role} onChange={handleChange}>
+                <option value="">Select Department</option>
+                <option value="Support">Support</option>
+                <option value="Training">Training</option>
+                <option value="Careers">Careers</option>
+                <option value="Feedback">Feedback</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <textarea
+                name="message"
+                placeholder="Your Message"
+                value={form.message}
+                onChange={handleChange}
+                required
+              ></textarea>
+            </div>
+
             <button type="submit" disabled={submitting}>
               {submitting ? "Sending..." : "Send Message"}
+              <FiSend />
             </button>
+
             {status && (
               <p
                 style={{
-                  marginTop: "12px",
+                  marginTop: "14px",
                   fontWeight: "500",
+                  fontSize: "14px",
                   color: status.ok ? "#1a7f37" : "#b42318",
                 }}
               >
@@ -248,38 +426,42 @@ const Contact: React.FC = () => {
             )}
           </form>
 
-          
           <div className="contact-info">
-            <div>📧 Email: info@cabincrew.edu.np</div>
-            <div>📞 Phone: +977 9744341824</div>
-            <div>📍 Address: AeroCareers Academy, Kathmandu, Nepal</div>
-            <div>🕒 Hours: Mon – Fri, 9:00 AM – 6:00 PM</div>
+            {infoItems.map((item, i) => (
+              <div className="info-card" key={i} style={{ animation: `fadeInUp 0.6s ease ${0.1 * i + 0.1}s forwards` }}>
+                <div className="info-icon">{item.icon}</div>
+                <div>
+                  <div className="info-label">{item.label}</div>
+                  {item.href ? (
+                    <a className="info-value" href={item.href} style={{ textDecoration: "none" }}>{item.value}</a>
+                  ) : (
+                    <div className="info-value">{item.value}</div>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            <div className="map-wrapper">
+              <div className="contact-map">
+                <iframe
+                  title="Office Map"
+                  src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3532.0!2d85.0!3d27.7!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x39eb199daecb6a17%3A0x2b16f4b8d6e5f5a3!2sKathmandu!5e0!3m2!1sen!2snp!4v1600000000000!5m2!1sen!2snp"
+                  width="100%"
+                  height="100%"
+                  style={{ border: 0 }}
+                  allowFullScreen={true}
+                  loading="lazy"
+                ></iframe>
+              </div>
+            </div>
           </div>
+        </div>
 
-
-          <div className="contact-map">
-            <iframe
-              title="Office Map"
-              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3532.0!2d85.0!3d27.7!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x39eb199daecb6a17%3A0x2b16f4b8d6e5f5a3!2sKathmandu!5e0!3m2!1sen!2snp!4v1600000000000!5m2!1sen!2snp"
-              width="100%"
-              height="100%"
-              style={{ border: 0 }}
-              allowFullScreen={true}
-              loading="lazy"
-            ></iframe>
-          </div>
-
-          
-          
-        </section>
-
-        
         <section className="contact-footer">
           <h2>Ready to Take Off?</h2>
           <p>Contact us today and let's guide you on your aviation journey!</p>
-          
         </section>
-        <Footer/>
+        <Footer />
       </div>
     </>
   );

@@ -22,10 +22,10 @@ const CareerNavbar = () => {
         .career-navbar {
           background: linear-gradient(135deg, #002b5c 0%, #003f7f 100%);
           padding: 0 40px;
-          font-family: 'Poppins', sans-serif;
+          font-family: var(--font-sans);
           position: sticky;
-          top: 70px;
-          z-index: 999;
+          top: 72px;
+          z-index: 998;
           box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
 
