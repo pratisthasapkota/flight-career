@@ -1,13 +1,62 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
+import multer from "multer";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { z } from "zod";
-import { eq, ilike } from "drizzle-orm";
+import { and, eq, ilike } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { vacancy, vacancyApplication } from "../db/schema.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { verifyAdmin } from "../utils/requireAdmin.js";
 
 const router = Router();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const RESUMES_DIR = path.resolve(__dirname, "../../uploads/resumes");
+fs.mkdirSync(RESUMES_DIR, { recursive: true });
+
+const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
+
+const allowedMimeTypes = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "image/jpeg",
+  "image/png",
+];
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, RESUMES_DIR),
+  filename: (_req, file, cb) => {
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+    cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}-${safeName}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (allowedMimeTypes.includes(file.mimetype)) return cb(null, true);
+    const err = new Error("Invalid file type. Only PDF, DOC, DOCX, JPG and PNG are allowed.") as Error & {
+      statusCode: number;
+    };
+    err.statusCode = 400;
+    cb(err);
+  },
+});
+
+function removeUploadedFile(file: Express.Multer.File): void {
+  try {
+    fs.unlink(file.path, () => undefined);
+  } catch {
+    // ignore
+  }
+}
 
 const vacancySchema = z.object({
   title: z.string().min(1).max(255),
@@ -242,15 +291,18 @@ router.post(
 
 router.post(
   "/:id/apply",
+  upload.single("cv"),
   asyncHandler(async (req: Request, res: Response) => {
     const parsed = vacancyApplySchema.safeParse(req.body);
     if (!parsed.success) {
+      if (req.file) removeUploadedFile(req.file);
       return res
         .status(400)
         .json({ success: false, message: parsed.error.issues[0].message });
     }
     const vacancyId = parseInt(String(req.params.id), 10);
     if (!Number.isInteger(vacancyId) || vacancyId <= 0) {
+      if (req.file) removeUploadedFile(req.file);
       return res
         .status(400)
         .json({ success: false, message: "Invalid vacancy id" });
@@ -261,6 +313,7 @@ router.post(
       .from(vacancy)
       .where(eq(vacancy.id, vacancyId));
     if (vResults.length === 0) {
+      if (req.file) removeUploadedFile(req.file);
       return res.status(404).json({ success: false, message: "Vacancy not found" });
     }
     const deadline = vResults[0].deadline;
@@ -270,6 +323,7 @@ router.post(
         const endOfDeadlineDay = new Date(deadlineDate);
         endOfDeadlineDay.setHours(23, 59, 59, 999);
         if (endOfDeadlineDay.getTime() < Date.now()) {
+          if (req.file) removeUploadedFile(req.file);
           return res.status(400).json({
             success: false,
             message: "This vacancy is closed - the application deadline has already passed.",
@@ -277,6 +331,25 @@ router.post(
         }
       }
     }
+    const existing = await db
+      .select()
+      .from(vacancyApplication)
+      .where(
+        and(
+          eq(vacancyApplication.vacancyId, vacancyId),
+          eq(vacancyApplication.email, email)
+        )
+      );
+    if (existing.length > 0) {
+      if (req.file) removeUploadedFile(req.file);
+      return res.status(409).json({
+        success: false,
+        message: "You have already applied to this vacancy with this email.",
+      });
+    }
+    const resumeUrl = req.file
+      ? `${BACKEND_URL}/uploads/resumes/${req.file.filename}`
+      : null;
     const createdAt = new Date().toISOString();
     const result = await db
       .insert(vacancyApplication)
@@ -285,6 +358,7 @@ router.post(
         name,
         email,
         phone,
+        resumeUrl,
         coverLetter: coverLetter || null,
         createdAt,
       })

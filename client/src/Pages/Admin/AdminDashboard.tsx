@@ -78,6 +78,7 @@ interface VacancyApplication {
   name: string;
   email: string;
   phone: string;
+  resumeUrl?: string;
   coverLetter?: string;
   createdAt?: string;
 }
@@ -1840,6 +1841,7 @@ useEffect(() => {
                               <th>Email</th>
                               <th>Phone</th>
                               <th>Cover Letter</th>
+                              <th>CV</th>
                               <th>Date</th>
                             </tr>
                           </thead>
@@ -1851,6 +1853,20 @@ useEffect(() => {
                                 <td>{app.email}</td>
                                 <td>{app.phone}</td>
                                 <td className="adm-text-truncate">{app.coverLetter || "N/A"}</td>
+                                <td>
+                                  {app.resumeUrl ? (
+                                    <a
+                                      href={app.resumeUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      style={{ color: "#00509e", fontWeight: 600 }}
+                                    >
+                                      View CV
+                                    </a>
+                                  ) : (
+                                    "N/A"
+                                  )}
+                                </td>
                                 <td>{formatDateTime(app.createdAt)}</td>
                               </tr>
                             ))}

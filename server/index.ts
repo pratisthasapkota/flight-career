@@ -7,6 +7,8 @@ import rateLimit from "express-rate-limit";
 import session from "express-session";
 import passport from "passport";
 import jwt from "jsonwebtoken";
+import path from "path";
+import { fileURLToPath } from "url";
 import type { NextFunction, Request, Response } from "express";
 
 import initializePassport, { handleGoogleCallback } from "./config/passport.js";
@@ -21,6 +23,9 @@ import applyRoutes from "./routes/apply.js";
 import notifyRoutes from "./routes/notify.js";
 import employeeInterestRoutes from "./routes/employeeInterest.js";
 import { ensureSchema } from "./db/ensureSchema.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const PORT = parseInt(process.env.PORT || "5000", 10);
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
@@ -48,7 +53,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   if (
     ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) &&
     req.headers["content-type"] &&
-    !req.headers["content-type"].toLowerCase().startsWith("application/json")
+    !req.headers["content-type"].toLowerCase().startsWith("application/json") &&
+    !req.headers["content-type"].toLowerCase().startsWith("multipart/form-data")
   ) {
     return res
       .status(415)
@@ -153,6 +159,8 @@ app.post("/auth/google/callback", authLimiter, handleGoogleCallback);
 
 // ---- Route Modules (all API endpoints live under /api) ----
 
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+
 app.use("/auth", authLimiter);
 app.use("/api/admin", adminLimiter);
 app.use("/api", authRoutes);
@@ -172,6 +180,11 @@ app.use((req: Request, res: Response) => {
 // ---- Error Handler ----
 app.use(
   (err: Error, _req: Request, res: Response, _next: NextFunction) => {
+    if (err && err.name === "MulterError") {
+      return res
+        .status(400)
+        .json({ success: false, message: "CV upload error: file may be too large or invalid." });
+    }
     if (err && "type" in err && (err as { type?: string }).type === "entity.parse.failed") {
       return res.status(400).json({ success: false, message: "Invalid JSON body" });
     }

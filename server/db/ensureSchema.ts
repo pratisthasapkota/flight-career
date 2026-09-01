@@ -14,6 +14,10 @@ export async function ensureSchema(): Promise<void> {
       ALTER TABLE apply
         ADD COLUMN IF NOT EXISTS created_at varchar(50);
     `);
+    await pool.query(`
+      ALTER TABLE vacancy_application
+        ADD COLUMN IF NOT EXISTS resume_url text;
+    `);
     console.log("Database schema is up to date");
   } catch (err) {
     console.error("ensureSchema skipped:", (err as Error).message);

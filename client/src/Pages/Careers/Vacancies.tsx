@@ -38,6 +38,7 @@ const Vacancies = () => {
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [submitted, setSubmitted] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
+  const [cvFile, setCvFile] = useState<File | null>(null);
 
   const [formData, setFormData] = useState<VacancyApplication>({
     name: "",
@@ -101,6 +102,7 @@ const Vacancies = () => {
       setSelectedVacancy(res.data.data);
       setShowModal(true);
       setSubmitted(false);
+      setCvFile(null);
       setFormData({ name: "", email: "", phone: "", coverLetter: "" });
     } catch (err) {
       console.error("Failed to load vacancy details", err);
@@ -118,6 +120,11 @@ const Vacancies = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const handleCvChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const file = e.target.files && e.target.files[0];
+    setCvFile(file || null);
+  };
+
   const handleApplySubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     if (selectedVacancy && isDeadlinePassed(selectedVacancy.deadline)) {
@@ -128,7 +135,13 @@ const Vacancies = () => {
     setSubmitting(true);
     try {
       const backendUrl: string = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
-      await axios.post(`${backendUrl}/api/vacancies/${selectedVacancy!.id}/apply`, formData);
+      const fd = new FormData();
+      fd.append("name", formData.name);
+      fd.append("email", formData.email);
+      fd.append("phone", formData.phone);
+      fd.append("coverLetter", formData.coverLetter || "");
+      if (cvFile) fd.append("cv", cvFile);
+      await axios.post(`${backendUrl}/api/vacancies/${selectedVacancy!.id}/apply`, fd);
       setSubmitted(true);
     } catch (err: any) {
       console.error("Failed to submit application", err);
@@ -936,6 +949,18 @@ const Vacancies = () => {
                           rows={4}
                           placeholder="Tell us why you're a great fit..."
                         ></textarea>
+                      </div>
+                      <div className="vac-form-group">
+                        <label>Upload CV (PDF, DOC, DOCX, JPG, PNG - max 5MB)</label>
+                        <input
+                          type="file"
+                          name="cv"
+                          accept=".pdf,.doc,.docx,image/jpeg,image/png"
+                          onChange={handleCvChange}
+                        />
+                        {cvFile && (
+                          <span style={{ fontSize: "12px", color: "#0a7e3f" }}>{cvFile.name}</span>
+                        )}
                       </div>
                       <button type="submit" className="vac-submit-btn" disabled={submitting}>
                         {submitting ? "Submitting..." : "Submit Application"}
