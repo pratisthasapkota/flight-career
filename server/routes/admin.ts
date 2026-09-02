@@ -12,6 +12,7 @@ import {
   vacancyApplication,
   login,
   employeeInterest,
+  notify,
 } from "../db/schema.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { verifyAdmin } from "../utils/requireAdmin.js";
@@ -90,6 +91,7 @@ router.get(
     const vacancies = await db.select().from(vacancy);
     const users = await db.select().from(login);
     const interests = await db.select().from(employeeInterest);
+    const subscribers = await db.select().from(notify);
 
     res.json({
       success: true,
@@ -138,6 +140,10 @@ router.get(
           role: r.role,
           message: r.message,
           createdAt: r.createdAt,
+        })),
+        subscribers: subscribers.map((r) => ({
+          id: r.id,
+          email: r.email,
         })),
       },
     });
@@ -270,6 +276,30 @@ router.delete(
       await db.delete(product).where(eq(product.orderId, String(orderId)));
     }
     res.json({ success: true, message: "Order deleted" });
+  })
+);
+
+router.delete(
+  "/subscribers/:id",
+  verifyAdmin,
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid subscriber id" });
+    }
+
+    const target = await db.select().from(notify).where(eq(notify.id, id));
+    if (target.length === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Subscriber not found" });
+    }
+
+    await db.delete(notify).where(eq(notify.id, id));
+
+    res.json({ success: true, message: "Subscriber deleted successfully" });
   })
 );
 

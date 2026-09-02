@@ -110,12 +110,18 @@ interface User {
   verified: boolean;
 }
 
+interface Subscriber {
+  id: number | string;
+  email: string;
+}
+
 interface AdminData {
   vacancies: Vacancy[];
   vacancyApplications: VacancyApplication[];
   jobApplications: JobApplication[];
   employeeInterests: EmployeeInterest[];
   users: User[];
+  subscribers: Subscriber[];
   orders: OrderItem[];
 }
 
@@ -185,6 +191,10 @@ interface ProductFilters {
 interface UserFilters {
   search: string;
   verified: string;
+}
+
+interface SubscriberFilters {
+  search: string;
 }
 
 interface Tab {
@@ -400,6 +410,7 @@ const AdminDashboard = () => {
   const [jobAppFilters, setJobAppFilters] = useState<JobAppFilters>({ search: "", program: "", from: "", to: "" });
   const [productFilters, setProductFilters] = useState<ProductFilters>({ search: "", category: "" });
   const [userFilters, setUserFilters] = useState<UserFilters>({ search: "", verified: "" });
+  const [subscriberFilters, setSubscriberFilters] = useState<SubscriberFilters>({ search: "" });
 
   const backendUrl: string = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
 
@@ -523,6 +534,17 @@ useEffect(() => {
     } catch (err: any) {
       console.error("Failed to delete user", err);
       alert(err.response?.data?.message || "Failed to delete user");
+    }
+  };
+
+  const handleDeleteSubscriber = async (id: number | string): Promise<void> => {
+    if (!window.confirm(`Delete this subscriber (ID ${id})? This will permanently remove them from the notify list.`)) return;
+    try {
+      await axios.delete(`${backendUrl}/api/admin/subscribers/${id}`, { headers: getHeaders() });
+      await fetchData();
+    } catch (err: any) {
+      console.error("Failed to delete subscriber", err);
+      alert(err.response?.data?.message || "Failed to delete subscriber");
     }
   };
 
@@ -757,6 +779,18 @@ useEffect(() => {
     [data, userFilters]
   );
 
+  const filteredSubscribers = useMemo(
+    (): Subscriber[] =>
+      (data?.subscribers || []).filter((s: Subscriber) => {
+        if (subscriberFilters.search) {
+          const q = subscriberFilters.search.toLowerCase();
+          if (!(s.email || "").toLowerCase().includes(q)) return false;
+        }
+        return true;
+      }),
+    [data, subscriberFilters]
+  );
+
   const revenueSeries = useMemo(() => {
     const map = new Map<string, number>();
     orderGroups.forEach((g: OrderGroup) => {
@@ -822,6 +856,7 @@ useEffect(() => {
     { id: "orders", label: "Orders", icon: "🛒" },
     { id: "products", label: "Products", icon: "📦" },
     { id: "users", label: "Users", icon: "👥" },
+    { id: "subscribers", label: "Subscribers", icon: "✉️" },
   ];
 
   const statCards: StatCard[] = data
@@ -834,6 +869,7 @@ useEffect(() => {
         { label: "Job Applications", value: data.jobApplications?.length || 0, color: "#00838f", bg: "#e0f7fa" },
         { label: "Employee Interests", value: data.employeeInterests?.length || 0, color: "#00838f", bg: "#e0f7fa" },
         { label: "Registered Users", value: data.users?.length || 0, color: "#00838f", bg: "#e0f7fa" },
+        { label: "Subscribers", value: data.subscribers?.length || 0, color: "#7c3aed", bg: "#f3e8ff" },
       ]
     : [];
 
@@ -2221,6 +2257,57 @@ useEffect(() => {
                         <div className="adm-empty">
                           <span className="empty-icon">&#128101;</span>
                           <p>No registered users yet</p>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {activeTab === "subscribers" && (
+                  <>
+                    <h2 className="adm-section-title">Notify Me Subscribers</h2>
+                    <AdmFilterBar
+                      search={subscriberFilters.search}
+                      setSearch={(v: string) => setSubscriberFilters({ ...subscriberFilters, search: v })}
+                      searchPlaceholder="Search email..."
+                    />
+                    <div className="adm-table-wrap">
+                      <div className="adm-table-header">
+                        <h3>Subscribers</h3>
+                        <span className="count-badge">{filteredSubscribers.length}</span>
+                      </div>
+                      {filteredSubscribers.length > 0 ? (
+                        <table className="adm-data-table">
+                          <thead>
+                            <tr>
+                              <th>ID</th>
+                              <th>Email</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredSubscribers.map((s: Subscriber) => (
+                              <tr key={s.id}>
+                                <td>{s.id}</td>
+                                <td style={{ fontWeight: 600 }}>{s.email}</td>
+                                <td>
+                                  <div className="adm-action-btns">
+                                    <button
+                                      className="adm-btn-sm adm-btn-delete"
+                                      onClick={() => handleDeleteSubscriber(s.id)}
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <div className="adm-empty">
+                          <span className="empty-icon">&#9993;</span>
+                          <p>No subscribers yet</p>
                         </div>
                       )}
                     </div>

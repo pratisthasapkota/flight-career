@@ -71,6 +71,8 @@ const Store: React.FC = () => {
   const [catalogProducts, setCatalogProducts] = useState<Product[] | null>(null);
   const [modalQty, setModalQty] = useState<number>(1);
   const [flyingCart, setFlyingCart] = useState<{ id: number } | null>(null);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const PAGE_SIZE = 8;
 
   useEffect(() => {
     let cancelled = false;
@@ -121,6 +123,21 @@ const Store: React.FC = () => {
     }
     return items;
   }, [allProducts, activeCategory, sortBy, searchQuery]);
+
+  const totalPages: number = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
+  const safePage: number = Math.min(currentPage, totalPages);
+  const paginatedProducts: Product[] = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filteredProducts.slice(start, start + PAGE_SIZE);
+  }, [filteredProducts, safePage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeCategory, sortBy, searchQuery]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [totalPages, currentPage]);
 
   const isOutOfStock = (product: Product): boolean =>
     typeof product.stock === "number" && product.stock <= 0;
@@ -384,6 +401,46 @@ const Store: React.FC = () => {
             color: #888;
             font-size: 0.9rem;
             margin-bottom: 20px;
+          }
+
+          .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 40px;
+          }
+
+          .page-btn {
+            min-width: 42px;
+            height: 42px;
+            padding: 0 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: white;
+            color: #555;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: 'Poppins', sans-serif;
+            cursor: pointer;
+            transition: all 0.2s ease;
+          }
+
+          .page-btn:hover:not(:disabled):not(.active) {
+            border-color: #00509e;
+            color: #00509e;
+          }
+
+          .page-btn.active {
+            background: #00509e;
+            border-color: #00509e;
+            color: white;
+          }
+
+          .page-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
           }
 
           .store-grid {
@@ -1182,10 +1239,12 @@ const Store: React.FC = () => {
         {/* ===== PRODUCTS ===== */}
         <div className="store-grid-container">
           <div className="results-info">
-            Showing {filteredProducts.length} of {allProducts.length} products
+            {filteredProducts.length === 0
+              ? "Showing 0 products"
+              : `Showing ${paginatedProducts.length > 0 ? (safePage - 1) * PAGE_SIZE + 1 : 0}–${(safePage - 1) * PAGE_SIZE + paginatedProducts.length} of ${filteredProducts.length} products`}
           </div>
           <div className="store-grid">
-            {filteredProducts.map((product: Product, index: number) => {
+            {paginatedProducts.map((product: Product, index: number) => {
               const badgeClass: string = product.badge
                 ? `badge-${product.badge.toLowerCase().replace(/\s/g, "")}`
                 : "";
@@ -1273,6 +1332,34 @@ const Store: React.FC = () => {
             <div style={{ textAlign: "center", padding: "80px 20px", color: "#aaa" }}>
               <div style={{ fontSize: "3rem", marginBottom: "12px" }}>🔍</div>
               <p>No products found. Try a different search or category.</p>
+            </div>
+          )}
+
+          {totalPages > 1 && (
+            <div className="pagination">
+              <button
+                className="page-btn"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              >
+                ‹ Prev
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  className={`page-btn ${currentPage === page ? "active" : ""}`}
+                  onClick={() => setCurrentPage(page)}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                className="page-btn"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next ›
+              </button>
             </div>
           )}
         </div>
