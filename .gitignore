@@ -7,3 +7,4 @@ server/.env
 server/login.json
 client/build/
 .DS_Store
+uploads/
