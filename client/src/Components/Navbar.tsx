@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { getEmail, isLoggedIn, clearAuth } from "../auth";
+import { fetchCurrentUser, logout } from "../auth";
 import { FiMenu, FiX } from "react-icons/fi";
 import { FaPlane } from "react-icons/fa";
 
@@ -8,10 +8,19 @@ const Navbar = () => {
   const [open, setOpen] = useState<boolean>(false);
   const [scrolled, setScrolled] = useState<boolean>(false);
   const [mobileOpen, setMobileOpen] = useState<boolean>(false);
+  const [loggedIn, setLoggedIn] = useState<boolean>(false);
+  const [email, setEmail] = useState<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
-  const loggedIn: boolean = isLoggedIn();
-  const email: string | null = getEmail();
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const user = await fetchCurrentUser();
+      setLoggedIn(user !== null);
+      setEmail(user?.email || null);
+    };
+    checkAuth();
+  }, [location]);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -26,8 +35,10 @@ const Navbar = () => {
 
   const isActive = (path: string): boolean => location.pathname === path;
 
-  const handleLogout = (): void => {
-    clearAuth();
+  const handleLogout = async (): Promise<void> => {
+    await logout();
+    setLoggedIn(false);
+    setEmail(null);
     navigate("/login");
   };
 

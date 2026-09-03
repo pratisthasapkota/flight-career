@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import axios from "axios";
 import Navbar from "../Components/Navbar";
 import Footer from "../Components/Footer";
 import Top from "../Components/Top";
@@ -6,11 +7,71 @@ import Top from "../Components/Top";
 import { useNavigate } from "react-router-dom";
 import { FaCertificate, FaChalkboardTeacher, FaPlane, FaUsers, FaBookOpen } from "react-icons/fa";
 
+interface CollegeData {
+  id: number;
+  name: string;
+  location: string | null;
+  image: string | null;
+  description: string | null;
+  features: string | string[];
+  active: boolean;
+}
+
 const Colleges: React.FC = () => {
   const navigate = useNavigate();
+  const [colleges, setColleges] = useState<CollegeData[]>([]);
+
   const handleClick = (): void => {
     navigate("/apply");
   };
+
+  useEffect(() => {
+    const fetchColleges = async (): Promise<void> => {
+      try {
+        const res = await axios.get(
+          `${process.env.REACT_APP_BACKEND_URL || "http://localhost:5000"}/api/colleges`
+        );
+        if (Array.isArray(res.data.data)) {
+          setColleges(res.data.data.filter((c: CollegeData) => c.active !== false));
+        }
+      } catch {
+        // fallback to static content below
+      }
+    };
+    fetchColleges();
+  }, []);
+
+  const fallbackColleges: CollegeData[] = [
+    {
+      id: 0,
+      name: "SkyWings Flight Academy – Kathmandu, Nepal",
+      location: "Kathmandu, Nepal",
+      image: "/pil.jpg",
+      description: null,
+      features: [
+        "DGCA- and EASA-approved curriculum",
+        "Modern fleet of Cessna and Piper aircraft",
+        "State-of-the-art full-motion flight simulators",
+        "Average CPL completion: 14 months",
+      ],
+      active: true,
+    },
+    {
+      id: 1,
+      name: "Blue Horizon Aviation – Bangalore, India",
+      location: "Bangalore, India",
+      image: "/yuu.jpg",
+      description: null,
+      features: [
+        "Integrated PPL + CPL program",
+        "200+ international airline alumni",
+        "On-campus accommodation and cafeteria",
+      ],
+      active: true,
+    },
+  ];
+
+  const displayColleges = colleges.length > 0 ? colleges : fallbackColleges;
 
   return (
     <div className="colleges-container">
@@ -215,34 +276,30 @@ const Colleges: React.FC = () => {
           for global standards, experienced faculty, and world-class facilities.
         </p>
 
-        <div className="college-card">
-          <div className="college-text">
-            <h3>SkyWings Flight Academy – Kathmandu, Nepal</h3>
-            <ul>
-              <li>DGCA- and EASA-approved curriculum</li>
-              <li>Modern fleet of Cessna and Piper aircraft</li>
-              <li>State-of-the-art full-motion flight simulators</li>
-              <li>Average CPL completion: 14 months</li>
-            </ul>
-          </div>
-          <div className="college-image">
-            <img src="/pil.jpg" alt="Pilot Academy" />
-          </div>
-        </div>
-
-        <div className="college-card">
-          <div className="college-text">
-            <h3>Blue Horizon Aviation – Bangalore, India</h3>
-            <ul>
-              <li>Integrated PPL + CPL program</li>
-              <li>200+ international airline alumni</li>
-              <li>On-campus accommodation and cafeteria</li>
-            </ul>
-          </div>
-          <div className="college-image">
-            <img src="/yuu.jpg" alt="Aviation College" />
-          </div>
-        </div>
+        {displayColleges.map((college) => {
+          const featureList = Array.isArray(college.features)
+            ? college.features
+            : college.features
+              ? college.features.split(",")
+              : [];
+          return (
+            <div className="college-card" key={college.id}>
+              <div className="college-text">
+                <h3>{college.name}</h3>
+                <ul>
+                  {featureList.map((f: string, i: number) => (
+                    <li key={i}>{f.trim()}</li>
+                  ))}
+                </ul>
+              </div>
+              {college.image && (
+                <div className="college-image">
+                  <img src={college.image} alt={college.name} />
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <Top />

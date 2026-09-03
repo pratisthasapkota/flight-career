@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
+import { fetchCurrentUser } from "../../auth";
 
 interface Vacancy {
   id: number | string;
@@ -39,6 +40,35 @@ const Vacancies = () => {
   const [submitted, setSubmitted] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [cvFile, setCvFile] = useState<File | null>(null);
+  const [appliedIds, setAppliedIds] = useState<Set<number | string>>(() => {
+    try {
+      const stored = localStorage.getItem("appliedVacancyIdsByEmail");
+      if (!stored) return new Set();
+      const map: Record<string, number[]> = JSON.parse(stored);
+      return new Set(Object.keys(map).flatMap((emailKey) => map[emailKey] || []));
+    } catch {
+      return new Set();
+    }
+  });
+
+  useEffect(() => {
+    const loadApplied = async () => {
+      const user = await fetchCurrentUser();
+      if (!user?.email) return;
+      try {
+        const stored = localStorage.getItem("appliedVacancyIdsByEmail");
+        if (!stored) return;
+        const map: Record<string, (string | number)[]> = JSON.parse(stored);
+        const ids = map[user.email.toLowerCase()] || [];
+        setAppliedIds(new Set(ids));
+      } catch {
+        // Ignore
+      }
+    };
+    loadApplied();
+  }, []);
+
+  const backendUrl: string = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
 
   const [formData, setFormData] = useState<VacancyApplication>({
     name: "",
@@ -53,7 +83,6 @@ const Vacancies = () => {
     let cancelled = false;
     const load = async () => {
       try {
-        const backendUrl: string = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
         const res = await axios.get(`${backendUrl}/api/vacancies`);
         if (!cancelled) setVacancies(res.data.data);
       } catch (err) {
@@ -66,7 +95,7 @@ const Vacancies = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [backendUrl]);
 
   const requestSeq = React.useRef<number>(0);
 
@@ -74,7 +103,6 @@ const Vacancies = () => {
     const seq = ++requestSeq.current;
     try {
       setLoading(true);
-      const backendUrl: string = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
       const res = await axios.get(`${backendUrl}/api/vacancies`, { params: { role } });
       if (seq === requestSeq.current) {
         setVacancies(res.data.data);
@@ -97,7 +125,6 @@ const Vacancies = () => {
 
   const openApplyModal = async (vacancy: Vacancy): Promise<void> => {
     try {
-      const backendUrl: string = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
       const res = await axios.get(`${backendUrl}/api/vacancies/${vacancy.id}`);
       setSelectedVacancy(res.data.data);
       setShowModal(true);
@@ -134,7 +161,6 @@ const Vacancies = () => {
     setError("");
     setSubmitting(true);
     try {
-      const backendUrl: string = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
       const fd = new FormData();
       fd.append("name", formData.name);
       fd.append("email", formData.email);
@@ -143,6 +169,17 @@ const Vacancies = () => {
       if (cvFile) fd.append("cv", cvFile);
       await axios.post(`${backendUrl}/api/vacancies/${selectedVacancy!.id}/apply`, fd);
       setSubmitted(true);
+      setAppliedIds((prev) => {
+        const next = new Set(prev).add(selectedVacancy!.id);
+        const email = formData.email.toLowerCase();
+        try {
+          const stored = localStorage.getItem("appliedVacancyIdsByEmail");
+          const map: Record<string, (string | number)[]> = stored ? JSON.parse(stored) : {};
+          map[email] = [...new Set([...(map[email] || []), selectedVacancy!.id])];
+          localStorage.setItem("appliedVacancyIdsByEmail", JSON.stringify(map));
+        } catch { /* ignore */ }
+        return next;
+      });
     } catch (err: any) {
       console.error("Failed to submit application", err);
       setError(err.response?.data?.message || "Failed to submit application. Please try again.");
@@ -814,8 +851,12 @@ const Vacancies = () => {
                         )}
                       </td>
                       <td>
-                        <button className="apply-btn" onClick={() => openApplyModal(v)} disabled={expired}>
-                          {expired ? "Closed" : "Apply Now"}
+                        <button
+                          className="apply-btn"
+                          onClick={() => openApplyModal(v)}
+                          disabled={expired || appliedIds.has(v.id)}
+                        >
+                          {expired ? "Closed" : appliedIds.has(v.id) ? "Applied" : "Apply Now"}
                         </button>
                       </td>
                     </tr>

@@ -1,16 +1,12 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { setAuth, clearAuth, fetchCurrentUser } from '../auth';
+import { fetchCurrentUser } from '../auth';
 
 const Call: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
     let cancelled = false;
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    const email = params.get('email');
-    const name = params.get('name');
 
     const finish = () => {
       if (cancelled) return;
@@ -20,13 +16,11 @@ const Call: React.FC = () => {
     };
 
     const start = async () => {
-      setAuth({ token, email, name });
       const user = await fetchCurrentUser();
       if (cancelled) return;
       if (user) {
         finish();
       } else {
-        clearAuth();
         navigate('/', { replace: true });
       }
     };

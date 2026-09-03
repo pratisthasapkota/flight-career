@@ -2,14 +2,12 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { FaGoogle, FaPlane, FaUser, FaLock } from "react-icons/fa";
 import axios from 'axios';
-import { setAuth } from '../auth';
 
 const backendUrl: string = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
 
 interface LoginResponse {
   success: boolean;
   message: string;
-  token: string;
   user: {
     email: string;
   };
@@ -46,10 +44,9 @@ const HomeScreen: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const response = await axios.post<LoginResponse>(`${backendUrl}/api/login`, { email, password });
-      const { success, message, token, user } = response.data;
+      const response = await axios.post<LoginResponse>(`${backendUrl}/api/login`, { email, password }, { withCredentials: true });
+      const { success, message } = response.data;
       if (success) {
-        setAuth({ token, email: user.email });
         const state = location.state as LocationState | null;
         navigate(state?.from || "/", {
           state: state?.checkoutState || undefined,

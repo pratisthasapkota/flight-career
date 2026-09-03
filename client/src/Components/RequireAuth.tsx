@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { fetchCurrentUser, isLoggedIn } from "../auth";
+import { fetchCurrentUser } from "../auth";
 
 const RequireAuth = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
@@ -10,11 +10,6 @@ const RequireAuth = ({ children }: { children: React.ReactNode }) => {
     let cancelled = false;
 
     const check = async () => {
-      if (!isLoggedIn()) {
-        if (!cancelled) setStatus("unauthenticated");
-        return;
-      }
-
       const user = await fetchCurrentUser();
       if (cancelled) return;
       setStatus(user ? "authenticated" : "unauthenticated");

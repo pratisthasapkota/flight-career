@@ -2,6 +2,9 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
@@ -19,11 +22,40 @@ import { verifyAdmin } from "../utils/requireAdmin.js";
 import { sendEmail } from "../email.js";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
+const isProd = process.env.NODE_ENV === "production";
 
 const router = Router();
 
+const JWT_SECRET = process.env.JWT_SECRET || "dev_jwt_secret_change_me";
+
+const setAdminTokenCookie = (res: Response, token: string, maxAge: number): void => {
+  const sameSite = isProd ? "none" : "lax";
+  res.cookie("admin_token", token, {
+    httpOnly: true,
+    secure: isProd,
+    sameSite,
+    maxAge,
+    path: "/",
+  });
+};
+
+const clearAdminTokenCookie = (res: Response): void => {
+  const sameSite = isProd ? "none" : "lax";
+  res.cookie("admin_token", "", {
+    httpOnly: true,
+    secure: isProd,
+    sameSite,
+    maxAge: 0,
+    path: "/",
+  });
+};
+
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const RESUMES_DIR = path.resolve(__dirname, "../../uploads/resumes");
 
 const adminLoginSchema = z.object({
   email: z.string().email(),
@@ -58,13 +90,21 @@ router.post(
     }
 
     const { email, password } = parsed.data;
-    if (email !== ADMIN_EMAIL || !ADMIN_PASSWORD_HASH) {
+    if (email !== ADMIN_EMAIL) {
+      console.error("[admin] Login failed: email mismatch");
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid credentials" });
+    }
+    if (!ADMIN_PASSWORD_HASH) {
+      console.error("[admin] Login failed: ADMIN_PASSWORD_HASH not set");
       return res
         .status(401)
         .json({ success: false, message: "Invalid credentials" });
     }
     const passwordMatch = await bcrypt.compare(password, ADMIN_PASSWORD_HASH);
     if (!passwordMatch) {
+      console.error("[admin] Login failed: password mismatch");
       return res
         .status(401)
         .json({ success: false, message: "Invalid credentials" });
@@ -72,12 +112,37 @@ router.post(
 
     const token = jwt.sign(
       { email, role: "admin" },
-      process.env.JWT_SECRET as string,
+      JWT_SECRET,
       {
         expiresIn: "24h",
       }
     );
-    res.json({ success: true, token, message: "Admin logged in successfully" });
+    setAdminTokenCookie(res, token, 24 * 60 * 60 * 1000);
+    res.json({ success: true, message: "Admin logged in successfully" });
+  })
+);
+
+router.get(
+  "/resume/:filename",
+  verifyAdmin,
+  asyncHandler(async (req: Request, res: Response) => {
+    const raw = String(req.params.filename || "");
+    if (!raw) {
+      return res.status(400).json({ success: false, message: "Filename required" });
+    }
+    if (!/^[A-Za-z0-9._-]+$/.test(raw)) {
+      return res.status(400).json({ success: false, message: "Invalid filename" });
+    }
+    const filePath = path.resolve(RESUMES_DIR, raw);
+    if (!filePath.startsWith(RESUMES_DIR)) {
+      return res.status(400).json({ success: false, message: "Invalid path" });
+    }
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: "Resume not found" });
+    }
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Content-Disposition", `inline; filename="${raw}"`);
+    res.sendFile(filePath);
   })
 );
 
@@ -177,7 +242,7 @@ router.post(
 
     const token = jwt.sign(
       { email: user.email },
-      process.env.JWT_SECRET as string,
+      JWT_SECRET,
       { expiresIn: "1d" }
     );
     const verifyURL = `${BACKEND_URL}/api/verify/${token}`;
@@ -300,6 +365,38 @@ router.delete(
     await db.delete(notify).where(eq(notify.id, id));
 
     res.json({ success: true, message: "Subscriber deleted successfully" });
+  })
+);
+
+router.delete(
+  "/vacancy-applications/:id",
+  verifyAdmin,
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid application id" });
+    }
+
+    const target = await db.select().from(vacancyApplication).where(eq(vacancyApplication.id, id));
+    if (target.length === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Application not found" });
+    }
+
+    await db.delete(vacancyApplication).where(eq(vacancyApplication.id, id));
+
+    res.json({ success: true, message: "Application deleted successfully" });
+  })
+);
+
+router.post(
+  "/logout",
+  asyncHandler(async (req: Request, res: Response) => {
+    clearAdminTokenCookie(res);
+    res.json({ success: true, message: "Admin logged out successfully" });
   })
 );
 

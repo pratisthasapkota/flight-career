@@ -5,7 +5,7 @@ import bcrypt from "bcrypt";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { login } from "../db/schema.js";
+import { login, users } from "../db/schema.js";
 import { sendEmail } from "../email.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
@@ -14,6 +14,27 @@ const router = Router();
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
 const JWT_SECRET = process.env.JWT_SECRET || "dev_jwt_secret_change_me";
+const isProd = process.env.NODE_ENV === "production";
+
+const setTokenCookie = (res: Response, token: string, maxAge: number): void => {
+  res.cookie("auth_token", token, {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: "lax",
+    maxAge,
+    path: "/",
+  });
+};
+
+const clearTokenCookie = (res: Response): void => {
+  res.cookie("auth_token", "", {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: "lax",
+    maxAge: 0,
+    path: "/",
+  });
+};
 
 const signupSchema = z.object({
   email: z.string().email("Invalid email").max(255),
@@ -164,9 +185,9 @@ router.post(
     const token = jwt.sign({ email: user.email }, JWT_SECRET, {
       expiresIn: "1h",
     });
+    setTokenCookie(res, token, 60 * 60 * 1000);
     res.status(200).json({
       success: true,
-      token,
       user: { email: user.email, verified: user.verified },
     });
   })
@@ -175,10 +196,7 @@ router.post(
 router.get(
   "/me",
   asyncHandler(async (req: Request, res: Response) => {
-    const authHeader = req.headers.authorization || "";
-    const token = authHeader.startsWith("Bearer ")
-      ? authHeader.slice(7)
-      : null;
+    const token = req.cookies?.auth_token || null;
 
     if (!token) {
       return res
@@ -190,6 +208,7 @@ router.get(
     try {
       decoded = jwt.verify(token, JWT_SECRET);
     } catch (err) {
+      clearTokenCookie(res);
       return res
         .status(401)
         .json({ success: false, message: "Session expired" });
@@ -204,32 +223,59 @@ router.get(
         .json({ success: false, message: "User not found" });
     }
 
-    const result = await db
+    const loginResult = await db
       .select()
       .from(login)
       .where(eq(login.email, email));
-    if (result.length === 0) {
-      return res
-        .status(401)
-        .json({ success: false, message: "User not found" });
+
+    if (loginResult.length > 0) {
+      const user = loginResult[0];
+      if (!user.verified) {
+        return res
+          .status(403)
+          .json({ success: false, message: "Email not verified" });
+      }
+
+      const refreshedToken = jwt.sign({ email: user.email }, JWT_SECRET, {
+        expiresIn: "1h",
+      });
+      setTokenCookie(res, refreshedToken, 60 * 60 * 1000);
+
+      return res.status(200).json({
+        success: true,
+        user: { email: user.email, verified: user.verified },
+      });
     }
 
-    const user = result[0];
-    if (!user.verified) {
-      return res
-        .status(403)
-        .json({ success: false, message: "Email not verified" });
+    const googleResult = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email));
+
+    if (googleResult.length > 0) {
+      const user = googleResult[0];
+      const refreshedToken = jwt.sign({ email: user.email }, JWT_SECRET, {
+        expiresIn: "1h",
+      });
+      setTokenCookie(res, refreshedToken, 60 * 60 * 1000);
+
+      return res.status(200).json({
+        success: true,
+        user: { email: user.email, name: user.name },
+      });
     }
 
-    const refreshedToken = jwt.sign({ email: user.email }, JWT_SECRET, {
-      expiresIn: "1h",
-    });
+    return res
+      .status(401)
+      .json({ success: false, message: "User not found" });
+  })
+);
 
-    res.status(200).json({
-      success: true,
-      token: refreshedToken,
-      user: { email: user.email, verified: user.verified },
-    });
+router.post(
+  "/logout",
+  asyncHandler(async (req: Request, res: Response) => {
+    clearTokenCookie(res);
+    res.status(200).json({ success: true, message: "Logged out successfully" });
   })
 );
 

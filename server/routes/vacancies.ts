@@ -348,7 +348,7 @@ router.post(
       });
     }
     const resumeUrl = req.file
-      ? `${BACKEND_URL}/uploads/resumes/${req.file.filename}`
+      ? `${BACKEND_URL}/api/admin/resume/${encodeURIComponent(req.file.filename)}`
       : null;
     const createdAt = new Date().toISOString();
     const result = await db

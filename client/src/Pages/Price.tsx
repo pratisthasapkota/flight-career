@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import Navbar from "../Components/Navbar";
 import Footer from "../Components/Footer";
-import { isLoggedIn } from "../auth";
+import { fetchCurrentUser } from "../auth";
 
 interface CartItem {
   productId?: string | null;
@@ -55,16 +55,36 @@ const Price: React.FC = () => {
   const [step, setStep] = useState<number>(state?.step || 1);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [orderComplete, setOrderComplete] = useState<boolean>(false);
+  const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
+    if (errors[name as keyof FormData]) {
+      setErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
+  };
+
+  const validateFields = (): boolean => {
+    const newErrors: Partial<Record<keyof FormData, string>> = {};
+    const fields: (keyof FormData)[] = ["name", "email", "address", "city", "postalCode", "phone"];
+    fields.forEach((key) => {
+      if (!formData[key]?.trim()) {
+        newErrors[key] = "This field is required";
+      }
+    });
+    if (formData.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = "Please enter a valid email address";
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    const loggedIn = isLoggedIn();
-    if (!loggedIn) {
+    const user = await fetchCurrentUser();
+    if (!user) {
       navigate("/login", {
         state: {
           from: "/price",
@@ -75,7 +95,8 @@ const Price: React.FC = () => {
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      alert("Please enter a valid email address");
+      setErrors({ email: "Please enter a valid email address" });
+      setStep(1);
       return;
     }
 
@@ -111,7 +132,6 @@ const Price: React.FC = () => {
     }
   };
 
-  const isStepValid = (fields: (keyof FormData)[]) => fields.every((f) => formData[f]?.trim());
 
   if (orderComplete) {
     return (
@@ -293,6 +313,22 @@ const Price: React.FC = () => {
           box-shadow: 0 0 0 3px rgba(0,80,158,0.1);
         }
 
+        .form-group input.input-error {
+          border-color: #e53935;
+          background: #fff8f8;
+        }
+
+        .form-group input.input-error:focus {
+          box-shadow: 0 0 0 3px rgba(229,57,53,0.1);
+        }
+
+        .field-error {
+          color: #e53935;
+          font-size: 0.78rem;
+          margin-top: 5px;
+          font-weight: 500;
+        }
+
         .place-order-btn {
           width: 100%;
           padding: 16px;
@@ -469,36 +505,42 @@ const Price: React.FC = () => {
                   <div className="form-row">
                     <div className="form-group">
                       <label>Full Name</label>
-                      <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="John Doe" required />
+                      <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="John Doe" className={errors.name ? "input-error" : ""} />
+                      {errors.name && <div className="field-error">{errors.name}</div>}
                     </div>
                     <div className="form-group">
                       <label>Email</label>
-                      <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="john@example.com" required />
+                      <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="john@example.com" className={errors.email ? "input-error" : ""} />
+                      {errors.email && <div className="field-error">{errors.email}</div>}
                     </div>
                   </div>
                   <div className="form-group">
                     <label>Address</label>
-                    <input type="text" name="address" value={formData.address} onChange={handleChange} placeholder="123 Aviation Street" required />
+                    <input type="text" name="address" value={formData.address} onChange={handleChange} placeholder="123 Aviation Street" className={errors.address ? "input-error" : ""} />
+                    {errors.address && <div className="field-error">{errors.address}</div>}
                   </div>
                   <div className="form-row">
                     <div className="form-group">
                       <label>City</label>
-                      <input type="text" name="city" value={formData.city} onChange={handleChange} placeholder="Kathmandu" required />
+                      <input type="text" name="city" value={formData.city} onChange={handleChange} placeholder="Kathmandu" className={errors.city ? "input-error" : ""} />
+                      {errors.city && <div className="field-error">{errors.city}</div>}
                     </div>
                     <div className="form-group">
                       <label>Postal Code</label>
-                      <input type="text" name="postalCode" value={formData.postalCode} onChange={handleChange} placeholder="44600" required />
+                      <input type="text" name="postalCode" value={formData.postalCode} onChange={handleChange} placeholder="44600" className={errors.postalCode ? "input-error" : ""} />
+                      {errors.postalCode && <div className="field-error">{errors.postalCode}</div>}
                     </div>
                   </div>
                   <div className="form-group">
                     <label>Phone Number</label>
-                    <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="+977 9744341824" required />
+                    <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="+977 9744341824" className={errors.phone ? "input-error" : ""} />
+                    {errors.phone && <div className="field-error">{errors.phone}</div>}
                   </div>
                   <button
                     type="button"
                     className="place-order-btn"
                     onClick={() => {
-                      if (isStepValid(["name", "email", "address", "city", "postalCode", "phone"])) {
+                      if (validateFields()) {
                         setStep(2);
                       }
                     }}

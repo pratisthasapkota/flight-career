@@ -1,4 +1,4 @@
-import React, { useState, ChangeEvent, FormEvent } from "react";
+import React, { useState, useEffect, ChangeEvent, FormEvent } from "react";
 import axios from "axios";
 
 interface FormData {
@@ -21,6 +21,23 @@ function Apply() {
   });
 
   const [submitted, setSubmitted] = useState<boolean>(false);
+  const [colleges, setColleges] = useState<{ id: number; name: string; active: boolean }[]>([]);
+
+  useEffect(() => {
+    const fetchColleges = async (): Promise<void> => {
+      try {
+        const res = await axios.get(
+          `${process.env.REACT_APP_BACKEND_URL || "http://localhost:5000"}/api/colleges`
+        );
+        if (Array.isArray(res.data.data)) {
+          setColleges(res.data.data.filter((c: { active: boolean }) => c.active !== false));
+        }
+      } catch {
+        // fallback to empty, user will see empty dropdown
+      }
+    };
+    fetchColleges();
+  }, []);
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>): void => {
     const { name, value } = e.target;
@@ -271,9 +288,17 @@ function Apply() {
                   required
                 >
                   <option value="">-- Select College --</option>
-                  <option>SkyWings Flight Academy – Kathmandu</option>
-                  <option>Blue Horizon Aviation – Bangalore</option>
-                  <option>AirLink Academy – Dubai</option>
+                  {colleges.length > 0 ? (
+                    colleges.map((c) => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
+                    ))
+                  ) : (
+                    <>
+                      <option>SkyWings Flight Academy – Kathmandu</option>
+                      <option>Blue Horizon Aviation – Bangalore</option>
+                      <option>AirLink Academy – Dubai</option>
+                    </>
+                  )}
                 </select>
               </div>
 

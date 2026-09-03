@@ -7,6 +7,7 @@ import rateLimit from "express-rate-limit";
 import session from "express-session";
 import passport from "passport";
 import jwt from "jsonwebtoken";
+import cookieParser from "cookie-parser";
 import path from "path";
 import { fileURLToPath } from "url";
 import type { NextFunction, Request, Response } from "express";
@@ -22,6 +23,7 @@ import productsCatalogRoutes from "./routes/productsCatalog.js";
 import applyRoutes from "./routes/apply.js";
 import notifyRoutes from "./routes/notify.js";
 import employeeInterestRoutes from "./routes/employeeInterest.js";
+import collegesRoutes from "./routes/colleges.js";
 import { ensureSchema } from "./db/ensureSchema.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -67,6 +69,7 @@ app.use(
     limit: "100kb",
   })
 );
+app.use(cookieParser());
 
 // ---- Rate limiting ----
 const apiLimiter = rateLimit({
@@ -148,9 +151,14 @@ app.get(
       JWT_SECRET,
       { expiresIn: "12h" }
     );
-    const email = encodeURIComponent(authUser.email);
-    const name = encodeURIComponent(authUser.name ?? "");
-    res.redirect(`${CLIENT_URL}/call?token=${token}&email=${email}&name=${name}`);
+    res.cookie("auth_token", token, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: "lax",
+      maxAge: 12 * 60 * 60 * 1000,
+      path: "/",
+    });
+    res.redirect(`${CLIENT_URL}/call`);
   }
 );
 
@@ -158,8 +166,6 @@ app.get(
 app.post("/auth/google/callback", authLimiter, handleGoogleCallback);
 
 // ---- Route Modules (all API endpoints live under /api) ----
-
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 app.use("/auth", authLimiter);
 app.use("/api/admin", adminLimiter);
@@ -171,6 +177,7 @@ app.use("/api/products", productsCatalogRoutes);
 app.use("/api/apply", applyRoutes);
 app.use("/api/notify", notifyRoutes);
 app.use("/api/employee-interest", employeeInterestRoutes);
+app.use("/api/colleges", collegesRoutes);
 
 // ---- 404 ----
 app.use((req: Request, res: Response) => {
@@ -179,7 +186,7 @@ app.use((req: Request, res: Response) => {
 
 // ---- Error Handler ----
 app.use(
-  (err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  (err: Error, req: Request, res: Response, _next: NextFunction) => {
     if (err && err.name === "MulterError") {
       return res
         .status(400)
@@ -194,14 +201,14 @@ app.use(
         return res.status(status).json({ success: false, message: err.message });
       }
     }
-    console.error(err.stack);
+    console.error(`[server] ${req.method} ${req.path}:`, err.stack || err.message);
     res.status(500).json({ success: false, message: "Server error" });
   }
 );
 
 ensureSchema();
 
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
 

@@ -29,4 +29,13 @@ if (process.env.NODE_ENV === "production") {
       process.exit(1);
     }
   }
+} else {
+  const missingDev = ["ADMIN_EMAIL", "ADMIN_PASSWORD_HASH", "JWT_SECRET"].filter(
+    (k) => !process.env[k]
+  );
+  if (missingDev.length > 0) {
+    console.warn(
+      `[env] WARNING: Missing env vars (admin login may fail): ${missingDev.join(", ")}`
+    );
+  }
 }

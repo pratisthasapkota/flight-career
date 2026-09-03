@@ -95,6 +95,16 @@ export const vacancyApplication = pgTable("vacancy_application", {
   createdAt: varchar("created_at", { length: 50 }),
 });
 
+export const college = pgTable("college", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  location: varchar("location", { length: 255 }),
+  image: varchar("image", { length: 500 }),
+  description: text("description"),
+  features: text("features"),
+  active: boolean("active").default(true),
+});
+
 export const employeeInterest = pgTable("employee_interest", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),

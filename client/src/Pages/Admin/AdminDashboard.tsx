@@ -75,6 +75,7 @@ interface OrderGroup {
 
 interface VacancyApplication {
   id: number | string;
+  vacancyId?: number | string;
   name: string;
   email: string;
   phone: string;
@@ -115,6 +116,16 @@ interface Subscriber {
   email: string;
 }
 
+interface College {
+  id: number | string;
+  name: string;
+  location: string | null;
+  image: string | null;
+  description: string | null;
+  features: string | string[];
+  active: boolean;
+}
+
 interface AdminData {
   vacancies: Vacancy[];
   vacancyApplications: VacancyApplication[];
@@ -123,6 +134,7 @@ interface AdminData {
   users: User[];
   subscribers: Subscriber[];
   orders: OrderItem[];
+  colleges: College[];
 }
 
 interface VacancyForm {
@@ -149,6 +161,15 @@ interface ProductForm {
   active: boolean;
 }
 
+interface CollegeForm {
+  name: string;
+  location: string;
+  image: string;
+  description: string;
+  features: string;
+  active: boolean;
+}
+
 interface OrderFilters {
   status: string;
   from: string;
@@ -165,6 +186,7 @@ interface VacancyFilters {
 
 interface VacancyAppFilters {
   search: string;
+  vacancyTitle: string;
   from: string;
   to: string;
 }
@@ -186,6 +208,10 @@ interface JobAppFilters {
 interface ProductFilters {
   search: string;
   category: string;
+}
+
+interface CollegeFilters {
+  search: string;
 }
 
 interface UserFilters {
@@ -242,6 +268,15 @@ const emptyProduct: ProductForm = {
   description: "",
   sizes: "",
   stock: "0",
+  active: true,
+};
+
+const emptyCollege: CollegeForm = {
+  name: "",
+  location: "",
+  image: "",
+  description: "",
+  features: "",
   active: true,
 };
 
@@ -403,44 +438,86 @@ const AdminDashboard = () => {
   const [productForm, setProductForm] = useState<ProductForm>({ ...emptyProduct });
   const [savingProduct, setSavingProduct] = useState<boolean>(false);
 
+  const [colleges, setColleges] = useState<College[]>([]);
+  const [showCollegeForm, setShowCollegeForm] = useState<boolean>(false);
+  const [editingCollege, setEditingCollege] = useState<College | null>(null);
+  const [collegeForm, setCollegeForm] = useState<CollegeForm>({ ...emptyCollege });
+  const [savingCollege, setSavingCollege] = useState<boolean>(false);
+
   const [orderFilters, setOrderFilters] = useState<OrderFilters>({ status: "", from: "", to: "", search: "" });
   const [vacancyFilters, setVacancyFilters] = useState<VacancyFilters>({ search: "", role: "", from: "", to: "" });
-  const [vacancyAppFilters, setVacancyAppFilters] = useState<VacancyAppFilters>({ search: "", from: "", to: "" });
+  const [vacancyAppFilters, setVacancyAppFilters] = useState<VacancyAppFilters>({ search: "", vacancyTitle: "", from: "", to: "" });
   const [interestFilters, setInterestFilters] = useState<InterestFilters>({ search: "", role: "", from: "", to: "" });
   const [jobAppFilters, setJobAppFilters] = useState<JobAppFilters>({ search: "", program: "", from: "", to: "" });
   const [productFilters, setProductFilters] = useState<ProductFilters>({ search: "", category: "" });
   const [userFilters, setUserFilters] = useState<UserFilters>({ search: "", verified: "" });
   const [subscriberFilters, setSubscriberFilters] = useState<SubscriberFilters>({ search: "" });
+  const [collegeFilters, setCollegeFilters] = useState<CollegeFilters>({ search: "" });
+
+  const [coverLetterModal, setCoverLetterModal] = useState<{ open: boolean; title: string; content: string }>({
+    open: false,
+    title: "",
+    content: "",
+  });
 
   const backendUrl: string = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
 
-  const getHeaders = (): Record<string, string> => ({
-    Authorization: `Bearer ${localStorage.getItem("adminToken") || ""}`,
-  });
+  const withCreds = { withCredentials: true };
 
 useEffect(() => {
-    const token = localStorage.getItem("adminToken");
-    if (!token) {
-      navigate("/admin/login");
-      return;
-    }
-    fetchData();
+    const checkAuth = async () => {
+      try {
+        const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+        const res = await axios.get<{ success: boolean; data?: AdminData }>(`${backendUrl}/api/admin/applications`, {
+          withCredentials: true,
+        });
+        if (!res.data.success) {
+          navigate("/admin/login");
+          return;
+        }
+        setData(res.data.data ?? null);
+        const [catRes, colRes] = await Promise.all([
+          axios.get<{ data: Product[] }>(`${backendUrl}/api/products`).catch(() => null),
+          axios.get<{ data: College[] }>(`${backendUrl}/api/colleges`).catch(() => null),
+        ]);
+        if (catRes && Array.isArray(catRes.data.data)) {
+          setCatalog(catRes.data.data);
+        }
+        if (colRes && Array.isArray(colRes.data.data)) {
+          setColleges(colRes.data.data);
+        }
+      } catch {
+        navigate("/admin/login");
+        return;
+      } finally {
+        setLoading(false);
+      }
+    };
+    checkAuth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   const fetchData = async (): Promise<void> => {
     try {
-      const [appsRes, catRes] = await Promise.all([
-        axios.get<{ data: AdminData }>(`${backendUrl}/api/admin/applications`, { headers: getHeaders() }),
+      const [appsRes, catRes, colRes] = await Promise.all([
+        axios.get<{ success: boolean; data: AdminData }>(`${backendUrl}/api/admin/applications`, withCreds),
         axios.get<{ data: Product[] }>(`${backendUrl}/api/products`).catch(() => null),
+        axios.get<{ data: College[] }>(`${backendUrl}/api/colleges`).catch(() => null),
       ]);
-      setData(appsRes.data.data);
+      if (!appsRes.data.success) {
+        navigate("/admin/login");
+        return;
+      }
+      setData(appsRes.data.data ?? null);
       if (catRes && Array.isArray(catRes.data.data)) {
         setCatalog(catRes.data.data);
       }
+      if (colRes && Array.isArray(colRes.data.data)) {
+        setColleges(colRes.data.data);
+      }
     } catch (err: any) {
       if (err.response?.status === 401) {
-        localStorage.removeItem("adminToken");
+        await axios.post(`${backendUrl}/api/admin/logout`, {}, withCreds);
         navigate("/admin/login");
         return;
       }
@@ -450,8 +527,12 @@ useEffect(() => {
     }
   };
 
-  const handleLogout = (): void => {
-    localStorage.removeItem("adminToken");
+  const handleLogout = async (): Promise<void> => {
+    try {
+      await axios.post(`${backendUrl}/api/admin/logout`, {}, withCreds);
+    } catch {
+      // Ignore errors on logout
+    }
     navigate("/admin/login");
   };
 
@@ -491,9 +572,9 @@ useEffect(() => {
     setSavingVacancy(true);
     try {
       if (editingVacancy) {
-        await axios.put(`${backendUrl}/api/vacancies/${editingVacancy.id}`, vacancyForm, { headers: getHeaders() });
+        await axios.put(`${backendUrl}/api/vacancies/${editingVacancy.id}`, vacancyForm, withCreds);
       } else {
-        await axios.post(`${backendUrl}/api/vacancies`, vacancyForm, { headers: getHeaders() });
+        await axios.post(`${backendUrl}/api/vacancies`, vacancyForm, withCreds);
       }
       await fetchData();
       closeVacancyForm();
@@ -508,7 +589,7 @@ useEffect(() => {
   const handleDeleteVacancy = async (id: number | string): Promise<void> => {
     if (!window.confirm("Are you sure you want to delete this vacancy?")) return;
     try {
-      await axios.delete(`${backendUrl}/api/vacancies/${id}`, { headers: getHeaders() });
+      await axios.delete(`${backendUrl}/api/vacancies/${id}`, withCreds);
       await fetchData();
     } catch (err) {
       console.error("Failed to delete vacancy", err);
@@ -518,7 +599,7 @@ useEffect(() => {
 
   const handleResendVerification = async (id: number | string): Promise<void> => {
     try {
-      await axios.post(`${backendUrl}/api/admin/users/${id}/resend-verification`, {}, { headers: getHeaders() });
+      await axios.post(`${backendUrl}/api/admin/users/${id}/resend-verification`, {}, withCreds);
       alert("Verification email sent successfully");
     } catch (err: any) {
       console.error("Failed to resend verification", err);
@@ -529,7 +610,7 @@ useEffect(() => {
   const handleDeleteUser = async (id: number | string): Promise<void> => {
     if (!window.confirm(`Delete this user (ID ${id})? This will permanently remove the account and cannot be undone.`)) return;
     try {
-      await axios.delete(`${backendUrl}/api/admin/users/${id}`, { headers: getHeaders() });
+      await axios.delete(`${backendUrl}/api/admin/users/${id}`, withCreds);
       await fetchData();
     } catch (err: any) {
       console.error("Failed to delete user", err);
@@ -540,11 +621,34 @@ useEffect(() => {
   const handleDeleteSubscriber = async (id: number | string): Promise<void> => {
     if (!window.confirm(`Delete this subscriber (ID ${id})? This will permanently remove them from the notify list.`)) return;
     try {
-      await axios.delete(`${backendUrl}/api/admin/subscribers/${id}`, { headers: getHeaders() });
+      await axios.delete(`${backendUrl}/api/admin/subscribers/${id}`, withCreds);
       await fetchData();
     } catch (err: any) {
       console.error("Failed to delete subscriber", err);
       alert(err.response?.data?.message || "Failed to delete subscriber");
+    }
+  };
+
+  const handleDeleteVacancyApp = async (id: number | string): Promise<void> => {
+    if (!window.confirm(`Delete this application (ID ${id})? This cannot be undone.`)) return;
+    try {
+      await axios.delete(`${backendUrl}/api/admin/vacancy-applications/${id}`, withCreds);
+      await fetchData();
+    } catch (err: any) {
+      console.error("Failed to delete application", err);
+      alert(err.response?.data?.message || "Failed to delete application");
+    }
+  };
+
+  const viewResume = async (rawUrl: string): Promise<void> => {
+    try {
+      const res = await axios.get(rawUrl, { ...withCreds, responseType: "blob" });
+      const url = window.URL.createObjectURL(res.data as Blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+    } catch (err: any) {
+      console.error("Failed to load resume", err);
+      alert(err.response?.data?.message || "Failed to load resume. Please check your session.");
     }
   };
 
@@ -605,9 +709,9 @@ useEffect(() => {
     setSavingProduct(true);
     try {
       if (editingProduct) {
-        await axios.put(`${backendUrl}/api/products/${editingProduct.id}`, productToPayload(productForm), { headers: getHeaders() });
+        await axios.put(`${backendUrl}/api/products/${editingProduct.id}`, productToPayload(productForm), withCreds);
       } else {
-        await axios.post(`${backendUrl}/api/products`, productToPayload(productForm), { headers: getHeaders() });
+        await axios.post(`${backendUrl}/api/products`, productToPayload(productForm), withCreds);
       }
       await fetchData();
       closeProductForm();
@@ -622,7 +726,7 @@ useEffect(() => {
   const handleDeleteProduct = async (id: number | string): Promise<void> => {
     if (!window.confirm("Are you sure you want to delete this product?")) return;
     try {
-      await axios.delete(`${backendUrl}/api/products/${id}`, { headers: getHeaders() });
+      await axios.delete(`${backendUrl}/api/products/${id}`, withCreds);
       await fetchData();
     } catch (err) {
       console.error("Failed to delete product", err);
@@ -632,11 +736,93 @@ useEffect(() => {
 
   const handleToggleProductActive = async (p: Product): Promise<void> => {
     try {
-      await axios.put(`${backendUrl}/api/products/${p.id}`, productToPayload({ ...p, active: !p.active } as ProductForm), { headers: getHeaders() });
+      await axios.put(`${backendUrl}/api/products/${p.id}`, productToPayload({ ...p, active: !p.active } as ProductForm), withCreds);
       await fetchData();
     } catch (err) {
       console.error("Failed to toggle product", err);
       alert("Failed to update product");
+    }
+  };
+
+  const collegeToPayload = (c: CollegeForm): Record<string, unknown> => ({
+    name: c.name,
+    location: c.location || null,
+    image: c.image || null,
+    description: c.description || null,
+    features: c.features || null,
+    active: c.active,
+  });
+
+  const openCreateCollege = (): void => {
+    setEditingCollege(null);
+    setCollegeForm({ ...emptyCollege });
+    setShowCollegeForm(true);
+  };
+
+  const openEditCollege = (c: College): void => {
+    setEditingCollege(c);
+    setCollegeForm({
+      name: c.name || "",
+      location: c.location || "",
+      image: c.image || "",
+      description: c.description || "",
+      features: Array.isArray(c.features) ? c.features.join(",") : c.features || "",
+      active: c.active !== false,
+    });
+    setShowCollegeForm(true);
+  };
+
+  const closeCollegeForm = (): void => {
+    setShowCollegeForm(false);
+    setEditingCollege(null);
+    setCollegeForm({ ...emptyCollege });
+  };
+
+  const handleCollegeFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>): void => {
+    const { name, value, type, checked } = e.target as HTMLInputElement;
+    setCollegeForm((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  };
+
+  const handleSaveCollege = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    e.preventDefault();
+    setSavingCollege(true);
+    try {
+      if (editingCollege) {
+        await axios.put(`${backendUrl}/api/colleges/${editingCollege.id}`, collegeToPayload(collegeForm), withCreds);
+      } else {
+        await axios.post(`${backendUrl}/api/colleges`, collegeToPayload(collegeForm), withCreds);
+      }
+      await fetchData();
+      closeCollegeForm();
+    } catch (err: any) {
+      console.error("Failed to save college", err);
+      alert(err.response?.data?.message || "Failed to save college");
+    } finally {
+      setSavingCollege(false);
+    }
+  };
+
+  const handleDeleteCollege = async (id: number | string): Promise<void> => {
+    if (!window.confirm("Are you sure you want to delete this college?")) return;
+    try {
+      await axios.delete(`${backendUrl}/api/colleges/${id}`, withCreds);
+      await fetchData();
+    } catch (err) {
+      console.error("Failed to delete college", err);
+      alert("Failed to delete college");
+    }
+  };
+
+  const handleToggleCollegeActive = async (c: College): Promise<void> => {
+    try {
+      await axios.put(`${backendUrl}/api/colleges/${c.id}`, collegeToPayload({ ...c, active: !c.active } as unknown as CollegeForm), withCreds);
+      await fetchData();
+    } catch (err) {
+      console.error("Failed to toggle college", err);
+      alert("Failed to update college");
     }
   };
 
@@ -645,7 +831,7 @@ useEffect(() => {
       await axios.put(
         `${backendUrl}/api/admin/orders/${encodeURIComponent(key)}/status`,
         { status },
-        { headers: getHeaders() }
+        withCreds
       );
       await fetchData();
     } catch (err) {
@@ -657,9 +843,7 @@ useEffect(() => {
   const deleteOrder = async (key: string): Promise<void> => {
     if (!window.confirm("Delete this entire order?")) return;
     try {
-      await axios.delete(`${backendUrl}/api/admin/orders/${encodeURIComponent(key)}`, {
-        headers: getHeaders(),
-      });
+      await axios.delete(`${backendUrl}/api/admin/orders/${encodeURIComponent(key)}`, withCreds);
       await fetchData();
     } catch (err) {
       console.error("Failed to delete order", err);
@@ -715,6 +899,10 @@ useEffect(() => {
   const filteredVacancyApps = useMemo(
     (): VacancyApplication[] =>
       (data?.vacancyApplications || []).filter((a: VacancyApplication) => {
+        if (vacancyAppFilters.vacancyTitle) {
+          const vTitle = (data?.vacancies || []).find((v: Vacancy) => v.id === a.vacancyId)?.title || "";
+          if (vTitle !== vacancyAppFilters.vacancyTitle) return false;
+        }
         if (vacancyAppFilters.search) {
           const q = vacancyAppFilters.search.toLowerCase();
           if (!`${a.name || ""} ${a.email || ""} ${a.phone || ""}`.toLowerCase().includes(q)) return false;
@@ -761,6 +949,18 @@ useEffect(() => {
         return true;
       }),
     [catalog, productFilters]
+  );
+
+  const filteredColleges = useMemo(
+    (): College[] =>
+      colleges.filter((c: College) => {
+        if (collegeFilters.search) {
+          const q = collegeFilters.search.toLowerCase();
+          if (!`${c.name || ""} ${c.location || ""}`.toLowerCase().includes(q)) return false;
+        }
+        return true;
+      }),
+    [colleges, collegeFilters]
   );
 
   const filteredUsers = useMemo(
@@ -855,6 +1055,7 @@ useEffect(() => {
     { id: "job-apps", label: "Job Applications", icon: "📄" },
     { id: "orders", label: "Orders", icon: "🛒" },
     { id: "products", label: "Products", icon: "📦" },
+    { id: "colleges", label: "Colleges", icon: "🎓" },
     { id: "users", label: "Users", icon: "👥" },
     { id: "subscribers", label: "Subscribers", icon: "✉️" },
   ];
@@ -974,7 +1175,7 @@ useEffect(() => {
         .adm-main {
           flex: 1;
           padding: 25px 30px;
-          overflow-x: auto;
+          overflow: hidden auto;
         }
 
         .adm-stats {
@@ -1021,7 +1222,9 @@ useEffect(() => {
           background: white;
           border-radius: 12px;
           box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-          overflow: hidden;
+          overflow-x: auto;
+          overflow-y: auto;
+          max-height: calc(100vh - 260px);
           margin-bottom: 25px;
         }
 
@@ -1133,6 +1336,102 @@ useEffect(() => {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+
+        .adm-cover-letter-link {
+          max-width: 200px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: #00509e;
+          font-weight: 600;
+          cursor: pointer;
+          text-decoration: underline;
+          text-decoration-style: dotted;
+          text-underline-offset: 3px;
+        }
+
+        .adm-cover-letter-link:hover {
+          color: #003f7f;
+        }
+
+        .adm-cl-modal-overlay {
+          position: fixed;
+          top: 0; left: 0;
+          width: 100%; height: 100%;
+          background: rgba(0,0,0,0.5);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 10000;
+          padding: 20px;
+          animation: admFadeIn 0.2s ease;
+        }
+
+        @keyframes admFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        .adm-cl-modal {
+          background: white;
+          border-radius: 12px;
+          max-width: 600px;
+          width: 100%;
+          max-height: 80vh;
+          display: flex;
+          flex-direction: column;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+          animation: admModalSlide 0.25s ease;
+        }
+
+        @keyframes admModalSlide {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        .adm-cl-modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 18px 24px;
+          border-bottom: 1px solid #eef2f7;
+        }
+
+        .adm-cl-modal-header h3 {
+          margin: 0;
+          font-size: 16px;
+          color: #001a3d;
+        }
+
+        .adm-cl-modal-close {
+          background: none;
+          border: none;
+          font-size: 22px;
+          cursor: pointer;
+          color: #666;
+          padding: 4px 8px;
+          border-radius: 6px;
+          transition: background 0.2s;
+        }
+
+        .adm-cl-modal-close:hover {
+          background: #f0f0f0;
+          color: #333;
+        }
+
+        .adm-cl-modal-body {
+          padding: 24px;
+          overflow-y: auto;
+          flex: 1;
+        }
+
+        .adm-cl-modal-body p {
+          margin: 0;
+          font-size: 14px;
+          line-height: 1.7;
+          color: #333;
+          white-space: pre-wrap;
         }
 
         .adm-action-btns {
@@ -1857,6 +2156,10 @@ useEffect(() => {
                       search={vacancyAppFilters.search}
                       setSearch={(v: string) => setVacancyAppFilters({ ...vacancyAppFilters, search: v })}
                       searchPlaceholder="Search name, email, phone..."
+                      selectValue={vacancyAppFilters.vacancyTitle}
+                      setSelect={(v: string) => setVacancyAppFilters({ ...vacancyAppFilters, vacancyTitle: v })}
+                      selectOptions={[...new Set((data?.vacancies || []).map((v: Vacancy) => v.title))].sort()}
+                      selectLabel="All Vacancies"
                       from={vacancyAppFilters.from}
                       setFrom={(v: string) => setVacancyAppFilters({ ...vacancyAppFilters, from: v })}
                       to={vacancyAppFilters.to}
@@ -1876,36 +2179,52 @@ useEffect(() => {
                               <th>Name</th>
                               <th>Email</th>
                               <th>Phone</th>
+                              <th>Vacancy Title</th>
                               <th>Cover Letter</th>
                               <th>CV</th>
                               <th>Date</th>
+                              <th>Actions</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {filteredVacancyApps.map((app: VacancyApplication) => (
-                              <tr key={app.id}>
-                                <td>{app.id}</td>
-                                <td style={{ fontWeight: 600 }}>{app.name}</td>
-                                <td>{app.email}</td>
-                                <td>{app.phone}</td>
-                                <td className="adm-text-truncate">{app.coverLetter || "N/A"}</td>
-                                <td>
-                                  {app.resumeUrl ? (
-                                    <a
-                                      href={app.resumeUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      style={{ color: "#00509e", fontWeight: 600 }}
-                                    >
-                                      View CV
-                                    </a>
-                                  ) : (
-                                    "N/A"
-                                  )}
-                                </td>
-                                <td>{formatDateTime(app.createdAt)}</td>
-                              </tr>
-                            ))}
+                            {filteredVacancyApps.map((app: VacancyApplication) => {
+                              const vTitle = (data?.vacancies || []).find((v: Vacancy) => v.id === app.vacancyId)?.title || "N/A";
+                              return (
+                                <tr key={app.id}>
+                                  <td>{app.id}</td>
+                                  <td style={{ fontWeight: 600 }}>{app.name}</td>
+                                  <td>{app.email}</td>
+                                  <td>{app.phone}</td>
+                                  <td>{vTitle}</td>
+                                  <td
+                                    className={app.coverLetter ? "adm-cover-letter-link" : "adm-text-truncate"}
+                                    onClick={app.coverLetter ? () => setCoverLetterModal({ open: true, title: `Cover Letter — ${app.name}`, content: app.coverLetter || "" }) : undefined}
+                                  >
+                                    {app.coverLetter || "N/A"}
+                                  </td>
+                                  <td>
+                                    {app.resumeUrl ? (
+                                      <a
+                                        href="#"
+                                        onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
+                                          e.preventDefault();
+                                          void viewResume(app.resumeUrl || "");
+                                        }}
+                                        style={{ color: "#00509e", fontWeight: 600 }}
+                                      >
+                                        View CV
+                                      </a>
+                                    ) : (
+                                      "N/A"
+                                    )}
+                                  </td>
+                                  <td>{formatDateTime(app.createdAt)}</td>
+                                  <td>
+                                    <button className="adm-btn-sm adm-btn-delete" onClick={() => handleDeleteVacancyApp(app.id)}>Delete</button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       ) : (
@@ -2189,6 +2508,71 @@ useEffect(() => {
                         <div className="adm-empty">
                           <span className="empty-icon">&#128230;</span>
                           <p>No products yet. Add your first product.</p>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {activeTab === "colleges" && (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
+                      <h2 className="adm-section-title" style={{ margin: 0 }}>Colleges</h2>
+                      <button className="adm-btn-create" onClick={openCreateCollege}>+ Add College</button>
+                    </div>
+                    <AdmFilterBar
+                      search={collegeFilters.search}
+                      setSearch={(v: string) => setCollegeFilters({ search: v })}
+                      searchPlaceholder="Search college name or location..."
+                    />
+                    <div className="adm-table-wrap">
+                      <div className="adm-table-header">
+                        <h3>Colleges</h3>
+                        <span className="count-badge">{filteredColleges.length}</span>
+                      </div>
+                      {filteredColleges.length > 0 ? (
+                        <table className="adm-data-table">
+                          <thead>
+                            <tr>
+                              <th>ID</th>
+                              <th>Name</th>
+                              <th>Location</th>
+                              <th>Features</th>
+                              <th>Status</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredColleges.map((c: College) => (
+                              <tr key={c.id} style={c.active === false ? { opacity: 0.55 } : {}}>
+                                <td>{c.id}</td>
+                                <td style={{ fontWeight: 600 }}>{c.name}</td>
+                                <td>{c.location || "N/A"}</td>
+                                <td className="adm-text-truncate">
+                                  {Array.isArray(c.features) ? c.features.slice(0, 3).join(", ") : c.features || "N/A"}
+                                </td>
+                                <td>
+                                  <button
+                                    className={`adm-btn-sm ${c.active === false ? "adm-btn-delete" : "adm-btn-edit"}`}
+                                    onClick={() => handleToggleCollegeActive(c)}
+                                  >
+                                    {c.active === false ? "Hidden" : "Active"}
+                                  </button>
+                                </td>
+                                <td>
+                                  <div className="adm-action-btns">
+                                    <button className="adm-btn-sm adm-btn-edit" onClick={() => openEditCollege(c)}>Edit</button>
+                                    <button className="adm-btn-sm adm-btn-delete" onClick={() => handleDeleteCollege(c.id)}>Delete</button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <div className="adm-empty">
+                          <span className="empty-icon">&#127891;</span>
+                          <p>No colleges yet. Add your first college.</p>
                         </div>
                       )}
                     </div>
@@ -2549,6 +2933,105 @@ useEffect(() => {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showCollegeForm && (
+          <div className="adm-modal-overlay" onClick={(e: React.MouseEvent<HTMLDivElement>) => {
+            if (e.target === e.currentTarget) closeCollegeForm();
+          }}>
+            <div className="adm-modal">
+              <div className="adm-modal-header">
+                <h2>{editingCollege ? "Edit College" : "Create New College"}</h2>
+                <button className="adm-modal-close" onClick={closeCollegeForm}>&times;</button>
+              </div>
+              <div className="adm-modal-body">
+                <form onSubmit={handleSaveCollege}>
+                  <div className="adm-form-group">
+                    <label>College Name *</label>
+                    <input
+                      type="text"
+                      name="name"
+                      value={collegeForm.name}
+                      onChange={handleCollegeFormChange}
+                      placeholder="e.g. SkyWings Flight Academy – Kathmandu"
+                      required
+                    />
+                  </div>
+                  <div className="adm-form-group">
+                    <label>Location</label>
+                    <input
+                      type="text"
+                      name="location"
+                      value={collegeForm.location}
+                      onChange={handleCollegeFormChange}
+                      placeholder="e.g. Kathmandu, Nepal"
+                    />
+                  </div>
+                  <div className="adm-form-group">
+                    <label>Image Path</label>
+                    <input
+                      type="text"
+                      name="image"
+                      value={collegeForm.image}
+                      onChange={handleCollegeFormChange}
+                      placeholder="e.g. /college.jpg or https://..."
+                    />
+                  </div>
+                  <div className="adm-form-group">
+                    <label>Description</label>
+                    <textarea
+                      name="description"
+                      value={collegeForm.description}
+                      onChange={handleCollegeFormChange}
+                      placeholder="Brief description about the college"
+                      rows={3}
+                    ></textarea>
+                  </div>
+                  <div className="adm-form-group">
+                    <label>Features (comma-separated)</label>
+                    <textarea
+                      name="features"
+                      value={collegeForm.features}
+                      onChange={handleCollegeFormChange}
+                      placeholder="e.g. Modern Fleet,International Certification,Experienced Instructors"
+                      rows={3}
+                    ></textarea>
+                  </div>
+                  <div className="adm-form-group">
+                    <label style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        name="active"
+                        checked={collegeForm.active}
+                        onChange={handleCollegeFormChange}
+                      />
+                      Active (visible on Apply form and Colleges page)
+                    </label>
+                  </div>
+                  <div className="adm-form-actions">
+                    <button type="button" className="adm-form-cancel" onClick={closeCollegeForm}>Cancel</button>
+                    <button type="submit" className="adm-form-save" disabled={savingCollege}>
+                      {savingCollege ? "Saving..." : editingCollege ? "Update College" : "Create College"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {coverLetterModal.open && (
+          <div className="adm-cl-modal-overlay" onClick={() => setCoverLetterModal({ open: false, title: "", content: "" })}>
+            <div className="adm-cl-modal" onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}>
+              <div className="adm-cl-modal-header">
+                <h3>{coverLetterModal.title}</h3>
+                <button className="adm-cl-modal-close" onClick={() => setCoverLetterModal({ open: false, title: "", content: "" })}>&times;</button>
+              </div>
+              <div className="adm-cl-modal-body">
+                <p>{coverLetterModal.content}</p>
               </div>
             </div>
           </div>

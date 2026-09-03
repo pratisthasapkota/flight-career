@@ -24,12 +24,12 @@ const AdminLogin = () => {
     setLoading(true);
     try {
       const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
-      const res = await axios.post<{ success: boolean; token: string }>(
+      const res = await axios.post<{ success: boolean }>(
         `${backendUrl}/api/admin/login`,
-        formData
+        formData,
+        { withCredentials: true }
       );
       if (res.data.success) {
-        localStorage.setItem("adminToken", res.data.token);
         navigate("/admin/dashboard");
       }
     } catch (err: any) {
