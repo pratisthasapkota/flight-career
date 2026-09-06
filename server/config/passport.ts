@@ -168,7 +168,7 @@ export const handleGoogleCallback = async (
       { expiresIn: "12h" }
     );
 
-    res.cookie("session_token", localToken, {
+    res.cookie("auth_token", localToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
