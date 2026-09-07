@@ -10,6 +10,7 @@ import { db } from "../db/index.js";
 import { vacancy, vacancyApplication } from "../db/schema.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { verifyAdmin } from "../utils/requireAdmin.js";
+import { sniffFileType } from "../utils/fileType.js";
 
 const router = Router();
 
@@ -299,6 +300,12 @@ router.post(
       return res
         .status(400)
         .json({ success: false, message: parsed.error.issues[0].message });
+    }
+    if (req.file && !sniffFileType(req.file.path)) {
+      removeUploadedFile(req.file);
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid file contents. Only PDF, DOC, DOCX, JPG and PNG files are allowed." });
     }
     const vacancyId = parseInt(String(req.params.id), 10);
     if (!Number.isInteger(vacancyId) || vacancyId <= 0) {

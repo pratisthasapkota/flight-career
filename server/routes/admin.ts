@@ -2,12 +2,14 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
+import { sniffFileType, RESUME_CONTENT_TYPES } from "../utils/fileType.js";
 import {
   apply,
   product,
@@ -29,22 +31,40 @@ const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev_jwt_secret_change_me";
 
 const setAdminTokenCookie = (res: Response, token: string, maxAge: number): void => {
-  const sameSite = isProd ? "none" : "lax";
   res.cookie("admin_token", token, {
     httpOnly: true,
     secure: isProd,
-    sameSite,
+    sameSite: "lax",
     maxAge,
     path: "/",
   });
 };
 
 const clearAdminTokenCookie = (res: Response): void => {
-  const sameSite = isProd ? "none" : "lax";
   res.cookie("admin_token", "", {
     httpOnly: true,
     secure: isProd,
-    sameSite,
+    sameSite: "lax",
+    maxAge: 0,
+    path: "/",
+  });
+};
+
+const setCsrfCookie = (res: Response, token: string, maxAge: number): void => {
+  res.cookie("admin_csrf", token, {
+    httpOnly: false,
+    secure: isProd,
+    sameSite: "lax",
+    maxAge,
+    path: "/",
+  });
+};
+
+const clearCsrfCookie = (res: Response): void => {
+  res.cookie("admin_csrf", "", {
+    httpOnly: false,
+    secure: isProd,
+    sameSite: "lax",
     maxAge: 0,
     path: "/",
   });
@@ -118,7 +138,9 @@ router.post(
       }
     );
     setAdminTokenCookie(res, token, 24 * 60 * 60 * 1000);
-    res.json({ success: true, message: "Admin logged in successfully" });
+    const csrfToken = crypto.randomBytes(32).toString("hex");
+    setCsrfCookie(res, csrfToken, 24 * 60 * 60 * 1000);
+    res.json({ success: true, csrfToken, message: "Admin logged in successfully" });
   })
 );
 
@@ -140,9 +162,13 @@ router.get(
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ success: false, message: "Resume not found" });
     }
+    const fileType = sniffFileType(filePath);
+    if (!fileType) {
+      return res.status(400).json({ success: false, message: "Resume file type not recognized" });
+    }
     res.setHeader("Cache-Control", "no-store");
-    res.setHeader("Content-Disposition", `inline; filename="${raw}"`);
-    res.sendFile(filePath);
+    res.setHeader("Content-Disposition", `attachment; filename="${raw}"`);
+    res.sendFile(filePath, { headers: { "Content-Type": RESUME_CONTENT_TYPES[fileType] } });
   })
 );
 
@@ -396,6 +422,7 @@ router.post(
   "/logout",
   asyncHandler(async (req: Request, res: Response) => {
     clearAdminTokenCookie(res);
+    clearCsrfCookie(res);
     res.json({ success: true, message: "Admin logged out successfully" });
   })
 );

@@ -462,7 +462,15 @@ const AdminDashboard = () => {
 
   const backendUrl: string = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
 
-  const withCreds = { withCredentials: true };
+  const getCsrfToken = (): string => {
+    const match = document.cookie.match(/(?:^|;\s*)admin_csrf=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : "";
+  };
+
+  const withCreds = {
+    withCredentials: true,
+    headers: { "X-CSRF-Token": getCsrfToken() },
+  };
 
 useEffect(() => {
     const checkAuth = async () => {
