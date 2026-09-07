@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
-import { fetchCurrentUser } from "../../auth";
+import { useAuth } from "../../AuthContext";
 
 interface Vacancy {
   id: number | string;
@@ -31,6 +31,7 @@ const isDeadlinePassed = (deadline: string | undefined): boolean => {
 };
 
 const Vacancies = () => {
+  const { user } = useAuth();
   const [vacancies, setVacancies] = useState<Vacancy[]>([]);
   const [filter, setFilter] = useState<string>("All");
   const [selectedVacancy, setSelectedVacancy] = useState<Vacancy | null>(null);
@@ -52,23 +53,19 @@ const Vacancies = () => {
   });
 
   useEffect(() => {
-    const loadApplied = async () => {
-      const user = await fetchCurrentUser();
-      if (!user?.email) return;
-      try {
-        const stored = localStorage.getItem("appliedVacancyIdsByEmail");
-        if (!stored) return;
-        const map: Record<string, (string | number)[]> = JSON.parse(stored);
-        const ids = map[user.email.toLowerCase()] || [];
-        setAppliedIds(new Set(ids));
-      } catch {
-        // Ignore
-      }
-    };
-    loadApplied();
-  }, []);
+    if (!user?.email) return;
+    try {
+      const stored = localStorage.getItem("appliedVacancyIdsByEmail");
+      if (!stored) return;
+      const map: Record<string, (string | number)[]> = JSON.parse(stored);
+      const ids = map[user.email.toLowerCase()] || [];
+      setAppliedIds(new Set(ids));
+    } catch {
+      // Ignore
+    }
+  }, [user]);
 
-  const backendUrl: string = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+  const backendUrl: string = process.env.REACT_APP_BACKEND_URL || "";
 
   const [formData, setFormData] = useState<VacancyApplication>({
     name: "",

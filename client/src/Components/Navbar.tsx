@@ -1,26 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { fetchCurrentUser, logout } from "../auth";
+import { logout } from "../auth";
+import { useAuth } from "../AuthContext";
 import { FiMenu, FiX } from "react-icons/fi";
 import { FaPlane } from "react-icons/fa";
 
 const Navbar = () => {
+  const { user } = useAuth();
   const [open, setOpen] = useState<boolean>(false);
   const [scrolled, setScrolled] = useState<boolean>(false);
   const [mobileOpen, setMobileOpen] = useState<boolean>(false);
-  const [loggedIn, setLoggedIn] = useState<boolean>(false);
-  const [email, setEmail] = useState<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const checkAuth = async () => {
-      const user = await fetchCurrentUser();
-      setLoggedIn(user !== null);
-      setEmail(user?.email || null);
-    };
-    checkAuth();
-  }, [location]);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -37,8 +28,6 @@ const Navbar = () => {
 
   const handleLogout = async (): Promise<void> => {
     await logout();
-    setLoggedIn(false);
-    setEmail(null);
     navigate("/login");
   };
 
@@ -382,9 +371,9 @@ const Navbar = () => {
           <Link to="/store" className={isActive("/store") ? "active-link" : ""}>Store</Link>
           <Link to="/contact" className={isActive("/contact") ? "active-link" : ""}>Contact</Link>
 
-          {loggedIn ? (
+          {user ? (
             <div className="nav-auth">
-              <span className="nav-link nav-email">{email || "Logged in"}</span>
+              <span className="nav-link nav-email">{user.email || "Logged in"}</span>
               <span className="nav-link nav-logout" onClick={handleLogout}>Logout</span>
             </div>
           ) : (

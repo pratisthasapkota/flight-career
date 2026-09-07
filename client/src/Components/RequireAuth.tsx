@@ -1,31 +1,16 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { fetchCurrentUser } from "../auth";
+import { useAuth } from "../AuthContext";
 
 const RequireAuth = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
-  const [status, setStatus] = useState<string>("loading");
+  const { user, loading } = useAuth();
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const check = async () => {
-      const user = await fetchCurrentUser();
-      if (cancelled) return;
-      setStatus(user ? "authenticated" : "unauthenticated");
-    };
-
-    check();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (status === "loading") {
+  if (loading) {
     return null;
   }
 
-  if (status === "unauthenticated") {
+  if (!user) {
     return (
       <Navigate to="/login" replace state={{ from: location.pathname }} />
     );

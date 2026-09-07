@@ -1,35 +1,21 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchCurrentUser } from '../auth';
+import { useAuth } from '../AuthContext';
 
 const Call: React.FC = () => {
   const navigate = useNavigate();
+  const { user, loading } = useAuth();
 
   useEffect(() => {
-    let cancelled = false;
-
-    const finish = () => {
-      if (cancelled) return;
+    if (loading) return;
+    if (user) {
       const from = localStorage.getItem('redirectFrom') || '/';
       localStorage.removeItem('redirectFrom');
       navigate(from, { replace: true });
-    };
-
-    const start = async () => {
-      const user = await fetchCurrentUser();
-      if (cancelled) return;
-      if (user) {
-        finish();
-      } else {
-        navigate('/', { replace: true });
-      }
-    };
-
-    start();
-    return () => {
-      cancelled = true;
-    };
-  }, [navigate]);
+    } else {
+      navigate('/', { replace: true });
+    }
+  }, [user, loading, navigate]);
 
   return <h2>Logging in with Google...</h2>;
 };

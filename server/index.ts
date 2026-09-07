@@ -32,7 +32,7 @@ const __dirname = path.dirname(__filename);
 const PORT = parseInt(process.env.PORT || "5000", 10);
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
 const SESSION_SECRET = process.env.SESSION_SECRET || "mysecretkey123";
-const JWT_SECRET = process.env.JWT_SECRET || "";
+const JWT_SECRET = process.env.JWT_SECRET || "dev_jwt_secret_change_me";
 const CORS_ORIGINS = (process.env.CORS_ALLOWED_ORIGINS || CLIENT_URL)
   .split(",")
   .map((s) => s.trim())

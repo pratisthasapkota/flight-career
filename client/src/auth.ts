@@ -1,7 +1,8 @@
-const backendUrl: string = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+const backendUrl: string = process.env.REACT_APP_BACKEND_URL || "";
+const API_BASE: string = backendUrl ? `${backendUrl}/api` : "/api";
 
-export const API_URL: string = `${backendUrl}/api`;
-export const OAUTH_URL: string = `${backendUrl}/auth/google`;
+export const API_URL: string = API_BASE;
+export const OAUTH_URL: string = backendUrl ? `${backendUrl}/auth/google` : "/auth/google";
 
 interface UserData {
   email?: string;

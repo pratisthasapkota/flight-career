@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import Navbar from "../Components/Navbar";
 import Footer from "../Components/Footer";
-import { fetchCurrentUser } from "../auth";
+import { useAuth } from "../AuthContext";
 
 interface CartItem {
   productId?: string | null;
@@ -33,6 +33,7 @@ interface LocationState {
 const Price: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const state = location.state as LocationState | undefined;
   const cartItems = state?.cart || [];
   const singleProduct = state?.product;
@@ -83,7 +84,6 @@ const Price: React.FC = () => {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    const user = await fetchCurrentUser();
     if (!user) {
       navigate("/login", {
         state: {
@@ -103,7 +103,7 @@ const Price: React.FC = () => {
     setSubmitting(true);
 
     try {
-      const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || "";
       const payload = {
         name: formData.name,
         email: formData.email,

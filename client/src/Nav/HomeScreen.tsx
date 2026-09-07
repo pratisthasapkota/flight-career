@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { FaGoogle, FaPlane, FaUser, FaLock } from "react-icons/fa";
 import axios from 'axios';
 
-const backendUrl: string = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+const backendUrl: string = process.env.REACT_APP_BACKEND_URL || "";
 
 interface LoginResponse {
   success: boolean;
