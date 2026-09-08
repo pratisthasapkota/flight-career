@@ -1,4 +1,4 @@
-import React, { useState, ChangeEvent, FormEvent } from "react";
+import React, { useState, useEffect, ChangeEvent, FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import Navbar from "../Components/Navbar";
@@ -28,6 +28,13 @@ interface LocationState {
   product?: CartItem;
   formData?: FormData;
   step?: number;
+  paymentMethod?: string;
+  paymentSuccess?: boolean;
+  txnId?: string;
+  orderId?: string;
+  name?: string;
+  email?: string;
+  amount?: number;
 }
 
 const Price: React.FC = () => {
@@ -37,11 +44,16 @@ const Price: React.FC = () => {
   const state = location.state as LocationState | undefined;
   const cartItems = state?.cart || [];
   const singleProduct = state?.product;
+  const paymentSuccess = Boolean(state?.paymentSuccess);
+  const successTxnId = state?.txnId;
+  const successOrderId = state?.orderId;
 
   const items: CartItem[] = singleProduct
     ? [{ ...singleProduct, quantity: singleProduct.quantity || 1, size: singleProduct.size || "M" }]
     : cartItems;
   const orderTotal = items.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0);
+  const grandTotal =
+    orderTotal + (orderTotal >= 150 ? 0 : 9.99) + orderTotal * 0.1;
 
   const [formData, setFormData] = useState<FormData>(
     state?.formData || {
@@ -57,6 +69,41 @@ const Price: React.FC = () => {
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [orderComplete, setOrderComplete] = useState<boolean>(false);
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
+  const [paymentMethod, setPaymentMethod] = useState<string>(state?.paymentMethod || "Cash on Delivery");
+
+  const AllPaymentMethods = [
+    { id: "Cash on Delivery", label: "Cash on Delivery", desc: "Pay when your order arrives", icon: "💵" },
+    { id: "Khalti", label: "Khalti", desc: "Pay via Khalti wallet", icon: "📱" },
+    { id: "eSewa", label: "eSewa", desc: "Pay via eSewa wallet", icon: "💳" },
+    { id: "FonePay", label: "FonePay", desc: "Pay via FonePay wallet", icon: "🏦" },
+    { id: "Card", label: "Credit / Debit Card", desc: "Pay securely with your card", icon: "💳" },
+  ];
+
+  const [enabledMethods, setEnabledMethods] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    const backendUrl = process.env.REACT_APP_BACKEND_URL || "";
+    axios
+      .get(`${backendUrl}/api/payment/settings`)
+      .then((res) => {
+        if (res.data?.success && Array.isArray(res.data?.data?.enabledMethods)) {
+          setEnabledMethods(res.data.data.enabledMethods as string[]);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const paymentMethods = enabledMethods
+    ? AllPaymentMethods.filter((pm) => enabledMethods.includes(pm.id))
+    : AllPaymentMethods;
+
+  useEffect(() => {
+    if (enabledMethods && enabledMethods.length && !enabledMethods.includes(paymentMethod)) {
+      const first = AllPaymentMethods.find((pm) => enabledMethods.includes(pm.id));
+      if (first) setPaymentMethod(first.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabledMethods]);
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -88,7 +135,7 @@ const Price: React.FC = () => {
       navigate("/login", {
         state: {
           from: "/price",
-          checkoutState: { ...state, formData, step },
+          checkoutState: { ...state, formData, step, paymentMethod },
         },
       });
       return;
@@ -104,13 +151,14 @@ const Price: React.FC = () => {
 
     try {
       const backendUrl = process.env.REACT_APP_BACKEND_URL || "";
-      const payload = {
+      const orderPayload = {
         name: formData.name,
         email: formData.email,
         address: formData.address,
         city: formData.city,
         postalCode: formData.postalCode,
         phone: formData.phone,
+        paymentMethod,
         items: items.map((item) => ({
           productId: item.productId || null,
           productname: item.name,
@@ -119,19 +167,104 @@ const Price: React.FC = () => {
           size: item.size,
         })),
       };
-      await axios.post(`${backendUrl}/api/product`, payload);
-      if (!singleProduct) {
-        localStorage.removeItem("aeroCart");
+
+      if (paymentMethod === "Cash on Delivery") {
+        await axios.post(`${backendUrl}/api/product`, orderPayload);
+        if (!singleProduct) {
+          localStorage.removeItem("aeroCart");
+        }
+        setOrderComplete(true);
+        return;
       }
-      setOrderComplete(true);
+
+      const subtotal = items.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0);
+      const shipping = subtotal >= 150 ? 0 : 9.99;
+      const tax = subtotal * 0.1;
+      const total = subtotal + shipping + tax;
+
+      const sessionRes = await axios.post(`${backendUrl}/api/payment/create-session`, {
+        paymentMethod,
+        amount: Math.round(total * 100) / 100,
+        customerEmail: formData.email,
+        customerName: formData.name,
+      });
+
+      if (!sessionRes.data?.success || !sessionRes.data?.sessionId) {
+        throw new Error(sessionRes.data?.message || "Failed to start payment. Please try again.");
+      }
+
+      if (sessionRes.data?.redirectUrl) {
+        sessionStorage.setItem(
+          "pendingOrderPayload",
+          JSON.stringify({ ...orderPayload, sessionId: sessionRes.data.sessionId, amount: sessionRes.data.amount })
+        );
+        window.location.href = sessionRes.data.redirectUrl;
+        return;
+      }
+
+      navigate("/payment", {
+        state: {
+          sessionId: sessionRes.data.sessionId,
+          paymentMethod,
+          amount: sessionRes.data.amount,
+          customerEmail: formData.email,
+          customerName: formData.name,
+          orderPayload,
+        },
+      });
     } catch (error: any) {
       console.error(error);
-      alert(error.response?.data?.message || "Failed to place order. Please try again.");
+      alert(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Failed to place order. Please try again."
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
+
+  if (paymentSuccess) {
+    const paidMethod = state?.paymentMethod || paymentMethod;
+    const paidAmount = state?.amount || orderTotal;
+    return (
+      <>
+        <Navbar />
+        <div style={styles.completeContainer}>
+          <div style={styles.completeCard}>
+            <div style={styles.checkmark}>✓</div>
+            <h2 style={styles.completeTitle}>Payment &amp; Order Confirmed!</h2>
+            <p style={styles.completeText}>
+              Thank you, <strong>{state?.name || "customer"}</strong>! Your payment of{" "}
+              <strong>${paidAmount.toFixed(2)}</strong> via <strong>{paidMethod}</strong> was successful,
+              and your order <strong>{successOrderId || "has been placed"}</strong>.
+              <br />A confirmation email has been sent to <strong>{state?.email}</strong>.
+            </p>
+            {successTxnId && (
+              <div style={styles.completeItems}>
+                <div style={styles.completeItem}>
+                  <span>Transaction ID</span>
+                  <span style={{ fontWeight: 600, color: "#00509e", fontFamily: "monospace" }}>{successTxnId}</span>
+                </div>
+              </div>
+            )}
+            <div style={{ fontSize: "0.9rem", color: "#555", marginBottom: "8px" }}>
+              Payment Method: <strong>{paidMethod}</strong>
+            </div>
+            <div style={styles.completeTotal}>
+              <span>Paid</span>
+              <span>${paidAmount.toFixed(2)}</span>
+            </div>
+            <button style={styles.continueBtn} onClick={() => navigate("/store")}>
+              Continue Shopping
+            </button>
+          </div>
+        </div>
+        <Footer />
+      </>
+    );
+  }
 
   if (orderComplete) {
     return (
@@ -153,9 +286,12 @@ const Price: React.FC = () => {
                 </div>
               ))}
             </div>
+            <div style={{ fontSize: "0.9rem", color: "#555", marginBottom: "8px" }}>
+              Payment Method: <strong>{paymentMethod}</strong>
+            </div>
             <div style={styles.completeTotal}>
-              <span>Total Paid</span>
-              <span>${orderTotal.toFixed(2)}</span>
+              <span>{paymentMethod === "Cash on Delivery" ? "Pay on Delivery" : "Paid"}</span>
+              <span>${grandTotal.toFixed(2)}</span>
             </div>
             <button style={styles.continueBtn} onClick={() => navigate("/store")}>
               Continue Shopping
@@ -486,19 +622,15 @@ const Price: React.FC = () => {
             <span className="step-num">{step > 1 ? "✓" : "1"}</span>
             <span>Shipping</span>
           </div>
-          <div className={`progress-step ${step >= 2 ? (step > 2 ? "completed" : "active") : ""}`}>
-            <span className="step-num">{step > 2 ? "✓" : "2"}</span>
-            <span>Review</span>
-          </div>
-          <div className={`progress-step ${step >= 3 ? "active" : ""}`}>
-            <span className="step-num">3</span>
-            <span>Confirm</span>
+          <div className={`progress-step ${step >= 2 ? "active" : ""}`}>
+            <span className="step-num">2</span>
+            <span>Payment</span>
           </div>
         </div>
 
         <div className="checkout-body">
           <div className="checkout-form-card">
-            <h2>{step === 1 ? "Shipping Details" : step === 2 ? "Review Order" : "Confirm & Pay"}</h2>
+            <h2>{step === 1 ? "Shipping Details" : "Payment Method"}</h2>
             <form onSubmit={handleSubmit}>
               {step === 1 && (
                 <>
@@ -545,44 +677,68 @@ const Price: React.FC = () => {
                       }
                     }}
                   >
-                    Continue to Review →
+                    Continue to Payment →
                   </button>
                 </>
               )}
 
               {step === 2 && (
                 <>
+                  <div style={{ textAlign: "center", padding: "20px 0" }}>
+                    <div style={{ fontSize: "3rem", marginBottom: "10px" }}>🔒</div>
+                    <p style={{ color: "#666", marginBottom: "15px" }}>
+                      Select your payment method below. For online payments you will be redirected to our secure payment page to complete the transaction before your order is confirmed.
+                    </p>
+                  </div>
                   <div style={{ marginBottom: "20px" }}>
-                    <p style={{ fontSize: "0.9rem", color: "#666", marginBottom: "8px" }}>Shipping to:</p>
-                    <p style={{ fontWeight: 600 }}>{formData.name}</p>
-                    <p style={{ color: "#555" }}>{formData.address}, {formData.city} {formData.postalCode}</p>
-                    <p style={{ color: "#555" }}>{formData.email} · {formData.phone}</p>
+                    {paymentMethods.map((pm) => (
+                      <div
+                        key={pm.id}
+                        onClick={() => setPaymentMethod(pm.id)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "14px",
+                          padding: "16px 18px",
+                          marginBottom: "10px",
+                          border: `2px solid ${paymentMethod === pm.id ? "#00509e" : "#e8e8e8"}`,
+                          borderRadius: "12px",
+                          cursor: "pointer",
+                          background: paymentMethod === pm.id ? "#f0f7ff" : "#fff",
+                          transition: "all 0.2s ease",
+                        }}
+                      >
+                        <div style={{ fontSize: "1.5rem" }}>{pm.icon}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, color: "#001a3d", fontSize: "0.95rem" }}>{pm.label}</div>
+                          <div style={{ fontSize: "0.8rem", color: "#888" }}>{pm.desc}</div>
+                        </div>
+                        <div
+                          style={{
+                            width: "20px",
+                            height: "20px",
+                            borderRadius: "50%",
+                            border: "2px solid #ccc",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            background: paymentMethod === pm.id ? "#00509e" : "#fff",
+                            borderColor: paymentMethod === pm.id ? "#00509e" : "#ccc",
+                          }}
+                        >
+                          {paymentMethod === pm.id && (
+                            <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#fff" }} />
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                   <div style={{ display: "flex", gap: "10px" }}>
                     <button type="button" className="place-order-btn" style={{ background: "#e0e0e0", color: "#333" }} onClick={() => setStep(1)}>
                       ← Back
                     </button>
-                    <button type="button" className="place-order-btn" onClick={() => setStep(3)}>
-                      Review Complete →
-                    </button>
-                  </div>
-                </>
-              )}
-
-              {step === 3 && (
-                <>
-                  <div style={{ textAlign: "center", padding: "20px 0" }}>
-                    <div style={{ fontSize: "3rem", marginBottom: "10px" }}>🔒</div>
-                    <p style={{ color: "#666", marginBottom: "15px" }}>
-                      Click below to confirm your order. A confirmation email will be sent to <strong>{formData.email}</strong>.
-                    </p>
-                  </div>
-                  <div style={{ display: "flex", gap: "10px" }}>
-                    <button type="button" className="place-order-btn" style={{ background: "#e0e0e0", color: "#333" }} onClick={() => setStep(2)}>
-                      ← Back
-                    </button>
                     <button type="submit" className="place-order-btn" disabled={submitting}>
-                      {submitting ? "Processing..." : `Place Order — $${orderTotal.toFixed(2)}`}
+                      {submitting ? "Processing..." : paymentMethod === "Cash on Delivery" ? `Place Order — $${grandTotal.toFixed(2)}` : "Proceed to Secure Payment →"}
                     </button>
                   </div>
                 </>

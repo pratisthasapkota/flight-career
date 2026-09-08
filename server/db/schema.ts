@@ -51,6 +51,8 @@ export const product = pgTable("product", {
   orderId: varchar("order_id", { length: 100 }),
   orderDate: varchar("order_date", { length: 50 }),
   status: varchar("status", { length: 50 }).default("Pending"),
+  paymentMethod: varchar("payment_method", { length: 50 }).default("Cash on Delivery"),
+  isPaid: boolean("is_paid").default(false),
 });
 
 export const products = pgTable("products", {
@@ -113,4 +115,46 @@ export const employeeInterest = pgTable("employee_interest", {
   role: varchar("role", { length: 100 }),
   message: text("message"),
   createdAt: varchar("created_at", { length: 50 }),
+});
+
+export const paymentSessions = pgTable("payment_sessions", {
+  id: serial("id").primaryKey(),
+  sessionId: varchar("session_id", { length: 100 }).notNull().unique(),
+  paymentMethod: varchar("payment_method", { length: 50 }).notNull(),
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  customerEmail: varchar("customer_email", { length: 255 }),
+  customerName: varchar("customer_name", { length: 255 }),
+  gatewayRef: varchar("gateway_ref", { length: 255 }),
+  gatewayTxnId: varchar("gateway_txn_id", { length: 255 }),
+  used: boolean("used").default(false),
+  createdAt: varchar("created_at", { length: 50 }).notNull(),
+  completedAt: varchar("completed_at", { length: 50 }),
+});
+
+export const paymentSettings = pgTable("payment_settings", {
+  id: serial("id").primaryKey(),
+  mode: varchar("mode", { length: 20 }).notNull().default("demo"),
+  enabledMethods: text("enabled_methods").notNull().default("Cash on Delivery,Khalti,eSewa,FonePay,Card"),
+  khaltiPublicKey: text("khalti_public_key"),
+  khaltiSecretKey: text("khalti_secret_key"),
+  esewaMerchantId: text("esewa_merchant_id"),
+  esewaSecretKey: text("esewa_secret_key"),
+  fonepayMerchantId: text("fonepay_merchant_id"),
+  fonepaySecretKey: text("fonepay_secret_key"),
+  updatedAt: varchar("updated_at", { length: 50 }),
+});
+
+export const guide = pgTable("guide", {
+  id: serial("id").primaryKey(),
+  title: varchar("title", { length: 255 }).notNull(),
+  subtitle: text("subtitle"),
+  // Chapters stored as JSON string: [{ heading, body, items: string[] }]
+  chapters: text("chapters"),
+  // Which section this guide belongs to: tips | questions | course | guide
+  category: varchar("category", { length: 50 }).notNull().default("guide"),
+  // Filename of the uploaded PDF guide (stored on disk under uploads/guides)
+  pdfUrl: varchar("pdf_url", { length: 500 }),
+  active: boolean("active").default(true),
+  updatedAt: varchar("updated_at", { length: 50 }),
 });

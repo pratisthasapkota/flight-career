@@ -22,6 +22,10 @@ import {
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { verifyAdmin } from "../utils/requireAdmin.js";
 import { sendEmail } from "../email.js";
+import {
+  loadPaymentSettings,
+  savePaymentSettings,
+} from "../utils/paymentSettings.js";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
 const isProd = process.env.NODE_ENV === "production";
@@ -97,6 +101,8 @@ const serializeOrder = (r: typeof product.$inferSelect) => ({
   orderId: r.orderId || null,
   orderDate: r.orderDate || null,
   status: r.status || "Pending",
+  paymentMethod: r.paymentMethod || "Cash on Delivery",
+  isPaid: !!r.isPaid,
 });
 
 router.post(
@@ -354,6 +360,36 @@ router.put(
   })
 );
 
+router.put(
+  "/orders/:orderId/payment",
+  verifyAdmin,
+  asyncHandler(async (req: Request, res: Response) => {
+    const parsed = z
+      .object({ isPaid: z.boolean() })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid payment status" });
+    }
+    const orderId = String(req.params.orderId);
+    const { isPaid } = parsed.data;
+
+    if (orderId.startsWith("#")) {
+      await db
+        .update(product)
+        .set({ isPaid })
+        .where(eq(product.id, Number(orderId.slice(1))));
+    } else {
+      await db
+        .update(product)
+        .set({ isPaid })
+        .where(eq(product.orderId, orderId));
+    }
+    res.json({ success: true, message: "Payment status updated" });
+  })
+);
+
 router.delete(
   "/orders/:orderId",
   verifyAdmin,
@@ -415,6 +451,52 @@ router.delete(
     await db.delete(vacancyApplication).where(eq(vacancyApplication.id, id));
 
     res.json({ success: true, message: "Application deleted successfully" });
+  })
+);
+
+router.get(
+  "/payment-settings",
+  verifyAdmin,
+  asyncHandler(async (_req: Request, res: Response) => {
+    const settings = await loadPaymentSettings();
+    res.json({ success: true, data: settings });
+  })
+);
+
+router.put(
+  "/payment-settings",
+  verifyAdmin,
+  asyncHandler(async (req: Request, res: Response) => {
+    const parsed = z
+      .object({
+        mode: z.enum(["demo", "khalti", "live"]),
+        enabledMethods: z.array(z.string().min(1)).min(1),
+        khaltiPublicKey: z.string().optional().nullable(),
+        khaltiSecretKey: z.string().optional().nullable(),
+        esewaMerchantId: z.string().optional().nullable(),
+        esewaSecretKey: z.string().optional().nullable(),
+        fonepayMerchantId: z.string().optional().nullable(),
+        fonepaySecretKey: z.string().optional().nullable(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ success: false, message: parsed.error.issues[0].message });
+    }
+
+    const settings = await savePaymentSettings({
+      mode: parsed.data.mode === "khalti" ? "live" : parsed.data.mode,
+      enabledMethods: parsed.data.enabledMethods,
+      khaltiPublicKey: parsed.data.khaltiPublicKey,
+      khaltiSecretKey: parsed.data.khaltiSecretKey,
+      esewaMerchantId: parsed.data.esewaMerchantId,
+      esewaSecretKey: parsed.data.esewaSecretKey,
+      fonepayMerchantId: parsed.data.fonepayMerchantId,
+      fonepaySecretKey: parsed.data.fonepaySecretKey,
+    });
+
+    res.json({ success: true, message: "Payment settings saved", data: settings });
   })
 );
 

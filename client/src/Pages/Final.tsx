@@ -1,9 +1,49 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import axios from "axios";
 import { Link } from "react-router-dom";
 import Navbar from "../Components/Navbar";
 import Footer from "../Components/Footer";
 
+interface GuideChapter {
+  heading: string;
+  body?: string;
+  items: string[];
+}
+
+interface GuideData {
+  id: number | string;
+  title: string;
+  subtitle: string | null;
+  chapters: GuideChapter[];
+  pdfUrl: string | null;
+  active: boolean;
+}
+
 const Final: React.FC = () => {
+  const backendUrl: string =
+    process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+  const [guide, setGuide] = useState<GuideData | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await axios.get<{ success: boolean; data: GuideData }>(
+          `${backendUrl}/api/guide/byCategory/course`
+        );
+        if (res.data.success && res.data.data) {
+          setGuide(res.data.data);
+        }
+      } catch {
+        // leave null
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <>
       <style>{`
@@ -74,34 +114,56 @@ const Final: React.FC = () => {
       <Navbar />
 
       <div className="course-hero">
-        <h1>Cabin Crew Interview Mastery Course</h1>
-        <p>Learn everything needed to crack your Dream Airline Interview on the FIRST attempt.</p>
+        <h1>{guide?.title || "Cabin Crew Interview Mastery Course"}</h1>
+        <p>
+          {guide?.subtitle ||
+            "Learn everything needed to crack your Dream Airline Interview on the FIRST attempt."}
+        </p>
       </div>
 
       <div className="course-container">
-        <div className="section">
-          <h2>📌 What You Will Learn</h2>
-          <ul>
-            <li>Complete introduction to airline recruitment process</li>
-            <li>How to behave professionally during recruitment</li>
-            <li>How to answer personal & situational questions</li>
-            <li>Group discussion training & real examples</li>
-            <li>Personality development & confidence building</li>
-            <li>Resume/CV & grooming training included</li>
-          </ul>
-        </div>
+        {loading ? (
+          <div className="section">Loading course content...</div>
+        ) : Array.isArray(guide?.chapters) && guide.chapters.length > 0 ? (
+          guide.chapters.map((mod: GuideChapter, idx: number) => (
+            <div className="section" key={idx}>
+              <h2>{mod.heading}</h2>
+              {mod.body && <p>{mod.body}</p>}
+              {Array.isArray(mod.items) && mod.items.length > 0 && (
+                <ul>
+                  {mod.items.map((item: string, i: number) => (
+                    <li key={i}>{item}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))
+        ) : (
+          <div className="section">
+            <p>No course content added yet. Check back soon.</p>
+          </div>
+        )}
 
-        <div className="section">
-          <h2>📚 Course Modules</h2>
-          <ul>
-            <li>Module 1 — Introduction to Cabin Crew Industry</li>
-            <li>Module 2 — Communication & Body Language</li>
-            <li>Module 3 — Personal HR Questions</li>
-            <li>Module 4 — Final Interview Questions</li>
-            <li>Module 5 — Safety, First Aid & Aviation Knowledge</li>
-            <li>Module 6 — Final Evaluation & Certification</li>
-          </ul>
-        </div>
+        {guide?.pdfUrl && (
+          <div className="section" style={{ textAlign: "center" }}>
+            <a
+              href={guide.pdfUrl}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                display: "inline-block",
+                background: "#004d99",
+                color: "#fff",
+                padding: "13px 30px",
+                borderRadius: "8px",
+                fontWeight: 700,
+                textDecoration: "none",
+              }}
+            >
+              ⬇ Download the Full Course (PDF)
+            </a>
+          </div>
+        )}
 
         <div className="cta-box">
           <h2>📖 Want to Read Our Cabin Crew Interview Book?</h2>

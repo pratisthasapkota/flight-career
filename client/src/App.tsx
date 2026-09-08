@@ -15,6 +15,7 @@ import Call from './Pages/Call';
 import Apply from './Apply';
 
 import Price from './Pages/Price';
+import PaymentPage from './Pages/PaymentPage';
 import Final from './Pages/Final';
 import Finals from './Pages/Finals';
 import Training from './Explores/Training';
@@ -23,6 +24,7 @@ import Operation from './Explores/Operation';
 import Hostess from './Explores/Hostess';
 import Tips from './Pages/Tips';
 import Question from './Pages/Question';
+import Guide from './Pages/Guide';
 
 import Pilots from './Explores/Pilots';
 
@@ -54,15 +56,17 @@ function App() {
         <Route path="/sign" element={<Sign />} />
         <Route path="/store" element={<Store />} />
         <Route path="/price" element={<Price />} />
+        <Route path="/payment" element={<PaymentPage />} />
         <Route path="/final" element={<RequireAuth><Final /></RequireAuth>} />
         <Route path="/finals" element={<RequireAuth><Finals /></RequireAuth>} />
         <Route path="/question" element={<RequireAuth><Question /></RequireAuth>} />
-        <Route path="/training" element={<RequireAuth><Training /></RequireAuth>} />
-        <Route path="/operation" element={<RequireAuth><Operation /></RequireAuth>} />
-        <Route path="/craft" element={<RequireAuth><Craft /></RequireAuth>} />
-        <Route path="/hostess" element={<RequireAuth><Hostess /></RequireAuth>} />
+        <Route path="/training" element={<Training />} />
+        <Route path="/operation" element={<Operation />} />
+        <Route path="/craft" element={<Craft />} />
+        <Route path="/hostess" element={<Hostess />} />
         <Route path="/tips" element={<RequireAuth><Tips /></RequireAuth>} />
-        <Route path="/pilots" element={<RequireAuth><Pilots /></RequireAuth>} />
+        <Route path="/guide" element={<RequireAuth><Guide /></RequireAuth>} />
+        <Route path="/pilots" element={<Pilots />} />
         <Route path="/jobs" element={<Navigate to="/careers/vacancies" replace />} />
         <Route path="/call" element={<Call/>} />
 

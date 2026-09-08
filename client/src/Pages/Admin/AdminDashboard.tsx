@@ -58,6 +58,8 @@ interface OrderItem {
   phone?: string;
   orderDate?: string;
   status?: string;
+  paymentMethod?: string;
+  isPaid?: boolean;
 }
 
 interface OrderGroup {
@@ -70,6 +72,8 @@ interface OrderGroup {
   phone: string;
   orderDate: string;
   status: string;
+  paymentMethod?: string;
+  isPaid?: boolean;
   items: OrderItem[];
 }
 
@@ -126,6 +130,34 @@ interface College {
   active: boolean;
 }
 
+interface GuideChapter {
+  heading: string;
+  body?: string;
+  items: string[];
+}
+
+interface Guide {
+  id: number | string;
+  title: string;
+  subtitle: string | null;
+  chapters: GuideChapter[];
+  category?: string;
+  pdfUrl: string | null;
+  active: boolean;
+  updatedAt?: string;
+}
+
+interface PaymentSettings {
+  mode: "demo" | "khalti" | "live";
+  enabledMethods: string[];
+  khaltiPublicKey: string | null;
+  khaltiSecretKey: string | null;
+  esewaMerchantId: string | null;
+  esewaSecretKey: string | null;
+  fonepayMerchantId: string | null;
+  fonepaySecretKey: string | null;
+}
+
 interface AdminData {
   vacancies: Vacancy[];
   vacancyApplications: VacancyApplication[];
@@ -169,6 +201,28 @@ interface CollegeForm {
   features: string;
   active: boolean;
 }
+
+interface GuideForm {
+  title: string;
+  subtitle: string;
+  chapters: string;
+  category: string;
+  active: boolean;
+}
+
+const guideCategories: string[] = [
+  "guide",
+  "course",
+  "questions",
+  "tips",
+];
+
+const guideCategoryLabels: Record<string, string> = {
+  guide: "Stand Out From The Crowd (Book)",
+  course: "How to Pass Interview 100% (Course)",
+  questions: "Interview Questions & Answers",
+  tips: "Cabin Crew Interview Tips",
+};
 
 interface OrderFilters {
   status: string;
@@ -280,6 +334,14 @@ const emptyCollege: CollegeForm = {
   active: true,
 };
 
+const emptyGuide: GuideForm = {
+  title: "",
+  subtitle: "",
+  chapters: "",
+  category: "guide",
+  active: true,
+};
+
 const orderStatuses: string[] = ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"];
 
 const money = (n: number | string): string =>
@@ -325,6 +387,8 @@ const computeOrderGroups = (orders: OrderItem[]): OrderGroup[] => {
         phone: o.phone || "",
         orderDate: o.orderDate || "",
         status: o.status || "Pending",
+        paymentMethod: o.paymentMethod || "Cash on Delivery",
+        isPaid: !!o.isPaid,
         items: [],
       });
     }
@@ -444,6 +508,34 @@ const AdminDashboard = () => {
   const [collegeForm, setCollegeForm] = useState<CollegeForm>({ ...emptyCollege });
   const [savingCollege, setSavingCollege] = useState<boolean>(false);
 
+  const [guides, setGuides] = useState<Guide[]>([]);
+  const [showGuideForm, setShowGuideForm] = useState<boolean>(false);
+  const [editingGuide, setEditingGuide] = useState<Guide | null>(null);
+  const [guideForm, setGuideForm] = useState<GuideForm>({ ...emptyGuide });
+  const [guidePdf, setGuidePdf] = useState<File | null>(null);
+  const [savingGuide, setSavingGuide] = useState<boolean>(false);
+  const [guideFilters, setGuideFilters] = useState<{ search: string; category: string }>({ search: "", category: "" });
+
+  const ALL_PAYMENT_METHODS = [
+    { id: "Cash on Delivery", label: "Cash on Delivery", icon: "💵" },
+    { id: "Khalti", label: "Khalti", icon: "📱" },
+    { id: "eSewa", label: "eSewa", icon: "💳" },
+    { id: "FonePay", label: "FonePay", icon: "🏦" },
+    { id: "Card", label: "Credit / Debit Card", icon: "💳" },
+  ];
+
+  const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null);
+  const [payMode, setPayMode] = useState<"demo" | "live">("demo");
+  const [payMethods, setPayMethods] = useState<string[]>(["Cash on Delivery", "Khalti", "eSewa", "FonePay", "Card"]);
+  const [khaltiPublicKey, setKhaltiPublicKey] = useState("");
+  const [khaltiSecretKey, setKhaltiSecretKey] = useState("");
+  const [esewaMerchantId, setEsewaMerchantId] = useState("");
+  const [esewaSecretKey, setEsewaSecretKey] = useState("");
+  const [fonepayMerchantId, setFonepayMerchantId] = useState("");
+  const [fonepaySecretKey, setFonepaySecretKey] = useState("");
+  const [savingPaySettings, setSavingPaySettings] = useState<boolean>(false);
+  const [paySettingsMsg, setPaySettingsMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
   const [orderFilters, setOrderFilters] = useState<OrderFilters>({ status: "", from: "", to: "", search: "" });
   const [vacancyFilters, setVacancyFilters] = useState<VacancyFilters>({ search: "", role: "", from: "", to: "" });
   const [vacancyAppFilters, setVacancyAppFilters] = useState<VacancyAppFilters>({ search: "", vacancyTitle: "", from: "", to: "" });
@@ -484,9 +576,10 @@ useEffect(() => {
           return;
         }
         setData(res.data.data ?? null);
-        const [catRes, colRes] = await Promise.all([
+        const [catRes, colRes, guideRes] = await Promise.all([
           axios.get<{ data: Product[] }>(`${backendUrl}/api/products`).catch(() => null),
           axios.get<{ data: College[] }>(`${backendUrl}/api/colleges`).catch(() => null),
+          axios.get<{ data: Guide[] }>(`${backendUrl}/api/guide`).catch(() => null),
         ]);
         if (catRes && Array.isArray(catRes.data.data)) {
           setCatalog(catRes.data.data);
@@ -494,6 +587,24 @@ useEffect(() => {
         if (colRes && Array.isArray(colRes.data.data)) {
           setColleges(colRes.data.data);
         }
+        if (guideRes && Array.isArray(guideRes.data.data)) {
+          setGuides(guideRes.data.data);
+        }
+        try {
+          const payRes = await axios.get<{ success: boolean; data: PaymentSettings }>(`${backendUrl}/api/admin/payment-settings`, withCreds);
+          if (payRes.data?.success && payRes.data?.data) {
+            const s = payRes.data.data;
+            setPaymentSettings(s);
+            setPayMode(s.mode === "khalti" ? "live" : (s.mode || "demo") as "demo" | "live");
+            setPayMethods(s.enabledMethods?.length ? s.enabledMethods : ["Cash on Delivery", "Khalti", "eSewa", "FonePay", "Card"]);
+            setKhaltiPublicKey(s.khaltiPublicKey || "");
+            setKhaltiSecretKey(s.khaltiSecretKey || "");
+            setEsewaMerchantId(s.esewaMerchantId || "");
+            setEsewaSecretKey(s.esewaSecretKey || "");
+            setFonepayMerchantId(s.fonepayMerchantId || "");
+            setFonepaySecretKey(s.fonepaySecretKey || "");
+          }
+        } catch { /* non-fatal */ }
       } catch {
         navigate("/admin/login");
         return;
@@ -507,10 +618,11 @@ useEffect(() => {
 
   const fetchData = async (): Promise<void> => {
     try {
-      const [appsRes, catRes, colRes] = await Promise.all([
+      const [appsRes, catRes, colRes, guideRes] = await Promise.all([
         axios.get<{ success: boolean; data: AdminData }>(`${backendUrl}/api/admin/applications`, withCreds),
         axios.get<{ data: Product[] }>(`${backendUrl}/api/products`).catch(() => null),
         axios.get<{ data: College[] }>(`${backendUrl}/api/colleges`).catch(() => null),
+        axios.get<{ data: Guide[] }>(`${backendUrl}/api/guide`).catch(() => null),
       ]);
       if (!appsRes.data.success) {
         navigate("/admin/login");
@@ -522,6 +634,9 @@ useEffect(() => {
       }
       if (colRes && Array.isArray(colRes.data.data)) {
         setColleges(colRes.data.data);
+      }
+      if (guideRes && Array.isArray(guideRes.data.data)) {
+        setGuides(guideRes.data.data);
       }
     } catch (err: any) {
       if (err.response?.status === 401) {
@@ -834,6 +949,145 @@ useEffect(() => {
     }
   };
 
+  const chaptersToJson = (chapters: GuideChapter[]): string =>
+    JSON.stringify(
+      (chapters || []).map((c) => ({
+        heading: c.heading,
+        body: c.body || undefined,
+        items: (c.items || []).filter((i: string) => i.trim() !== ""),
+      })),
+      null,
+      2
+    );
+
+  const openCreateGuide = (): void => {
+    setEditingGuide(null);
+    setGuideForm({ ...emptyGuide });
+    setGuidePdf(null);
+    setShowGuideForm(true);
+  };
+
+  const seedDefaultGuide = async (): Promise<void> => {
+    if (!window.confirm("Seed default content for all 4 interview sections?")) return;
+    try {
+      const res = await axios.post(`${backendUrl}/api/guide/seed`, {}, withCreds);
+      await fetchData();
+      alert(res.data?.message || "Content seeded successfully!");
+    } catch (err: any) {
+      console.error("Failed to seed guide", err);
+      alert(err.response?.data?.message || "Failed to seed guide");
+    }
+  };
+
+  const seedGuideCategory = async (category: string): Promise<void> => {
+    const label = guideCategoryLabels[category] || category;
+    if (!window.confirm(`Seed default content for "${label}"?`)) return;
+    try {
+      const res = await axios.post(`${backendUrl}/api/guide/seed/${category}`, {}, withCreds);
+      await fetchData();
+      alert(res.data?.message || `"${label}" seeded successfully!`);
+    } catch (err: any) {
+      console.error("Failed to seed guide", err);
+      alert(err.response?.data?.message || "Failed to seed guide");
+    }
+  };
+
+  const openEditGuide = (g: Guide): void => {
+    setEditingGuide(g);
+    setGuideForm({
+      title: g.title || "",
+      subtitle: g.subtitle || "",
+      chapters: chaptersToJson(g.chapters || []),
+      category: g.category || "guide",
+      active: g.active !== false,
+    });
+    setGuidePdf(null);
+    setShowGuideForm(true);
+  };
+
+  const closeGuideForm = (): void => {
+    setShowGuideForm(false);
+    setEditingGuide(null);
+    setGuideForm({ ...emptyGuide });
+    setGuidePdf(null);
+  };
+
+  const handleGuideFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>): void => {
+    const { name, value, type, checked } = e.target as HTMLInputElement;
+    setGuideForm((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  };
+
+  const handleGuidePdfChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const file = e.target.files && e.target.files.length > 0 ? e.target.files[0] : null;
+    setGuidePdf(file);
+  };
+
+  const handleSaveGuide = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    e.preventDefault();
+    setSavingGuide(true);
+    try {
+      let chapters: string = guideForm.chapters;
+      if (chapters.trim()) {
+        try {
+          chapters = JSON.stringify(JSON.parse(chapters));
+        } catch {
+          alert("Chapters must be valid JSON. Format: [{ heading, body, items: [...] }]");
+          return;
+        }
+      }
+      const form = new FormData();
+      form.append("title", guideForm.title);
+      form.append("subtitle", guideForm.subtitle || "");
+      form.append("category", guideForm.category || "guide");
+      form.append("active", String(guideForm.active));
+      if (chapters.trim()) form.append("chapters", chapters);
+      if (guidePdf) form.append("pdf", guidePdf);
+
+      if (editingGuide) {
+        await axios.put(`${backendUrl}/api/guide/${editingGuide.id}`, form, withCreds);
+      } else {
+        await axios.post(`${backendUrl}/api/guide`, form, withCreds);
+      }
+      await fetchData();
+      closeGuideForm();
+    } catch (err: any) {
+      console.error("Failed to save guide", err);
+      alert(err.response?.data?.message || "Failed to save guide");
+    } finally {
+      setSavingGuide(false);
+    }
+  };
+
+  const handleDeleteGuide = async (id: number | string): Promise<void> => {
+    if (!window.confirm("Are you sure you want to delete this guide? Its PDF file will also be removed.")) return;
+    try {
+      await axios.delete(`${backendUrl}/api/guide/${id}`, withCreds);
+      await fetchData();
+    } catch (err) {
+      console.error("Failed to delete guide", err);
+      alert("Failed to delete guide");
+    }
+  };
+
+  const handleToggleGuideActive = async (g: Guide): Promise<void> => {
+    try {
+      const form = new FormData();
+      form.append("title", g.title);
+      form.append("subtitle", g.subtitle || "");
+      form.append("category", g.category || "guide");
+      form.append("active", String(!(g.active !== false)));
+      if (Array.isArray(g.chapters)) form.append("chapters", chaptersToJson(g.chapters));
+      await axios.put(`${backendUrl}/api/guide/${g.id}`, form, withCreds);
+      await fetchData();
+    } catch (err) {
+      console.error("Failed to toggle guide", err);
+      alert("Failed to update guide");
+    }
+  };
+
   const updateOrderStatus = async (key: string, status: string): Promise<void> => {
     try {
       await axios.put(
@@ -848,6 +1102,20 @@ useEffect(() => {
     }
   };
 
+  const updateOrderPayment = async (key: string, isPaid: boolean): Promise<void> => {
+    try {
+      await axios.put(
+        `${backendUrl}/api/admin/orders/${encodeURIComponent(key)}/payment`,
+        { isPaid },
+        withCreds
+      );
+      await fetchData();
+    } catch (err) {
+      console.error("Failed to update payment status", err);
+      alert("Failed to update payment status");
+    }
+  };
+
   const deleteOrder = async (key: string): Promise<void> => {
     if (!window.confirm("Delete this entire order?")) return;
     try {
@@ -856,6 +1124,45 @@ useEffect(() => {
     } catch (err) {
       console.error("Failed to delete order", err);
       alert("Failed to delete order");
+    }
+  };
+
+  const savePaymentSettings = async (): Promise<void> => {
+    setSavingPaySettings(true);
+    setPaySettingsMsg(null);
+    try {
+      const res = await axios.put<{ success: boolean; message?: string; data: PaymentSettings }>(
+        `${backendUrl}/api/admin/payment-settings`,
+        {
+          mode: payMode,
+          enabledMethods: payMethods,
+          khaltiPublicKey: khaltiPublicKey.trim() || null,
+          khaltiSecretKey: khaltiSecretKey.trim() || null,
+          esewaMerchantId: esewaMerchantId.trim() || null,
+          esewaSecretKey: esewaSecretKey.trim() || null,
+          fonepayMerchantId: fonepayMerchantId.trim() || null,
+          fonepaySecretKey: fonepaySecretKey.trim() || null,
+        },
+        withCreds
+      );
+      if (res.data?.success && res.data?.data) {
+        setPaymentSettings(res.data.data);
+        setPayMode(res.data.data.mode === "khalti" ? "live" : (res.data.data.mode || "demo") as "demo" | "live");
+        setPayMethods(res.data.data.enabledMethods?.length ? res.data.data.enabledMethods : payMethods);
+        setKhaltiPublicKey(res.data.data.khaltiPublicKey || "");
+        setKhaltiSecretKey(res.data.data.khaltiSecretKey || "");
+        setEsewaMerchantId(res.data.data.esewaMerchantId || "");
+        setEsewaSecretKey(res.data.data.esewaSecretKey || "");
+        setFonepayMerchantId(res.data.data.fonepayMerchantId || "");
+        setFonepaySecretKey(res.data.data.fonepaySecretKey || "");
+        setPaySettingsMsg({ type: "success", text: res.data.message || "Payment settings saved." });
+      } else {
+        setPaySettingsMsg({ type: "error", text: res.data?.message || "Failed to save payment settings." });
+      }
+    } catch (err: any) {
+      setPaySettingsMsg({ type: "error", text: err?.response?.data?.message || "Failed to save payment settings." });
+    } finally {
+      setSavingPaySettings(false);
     }
   };
 
@@ -971,6 +1278,22 @@ useEffect(() => {
     [colleges, collegeFilters]
   );
 
+  const filteredGuides = useMemo(
+    (): Guide[] =>
+      guides.filter((g: Guide) => {
+        if (guideFilters.category) {
+          const catLabel = guideCategoryLabels[g.category || "guide"] || g.category || "guide";
+          if (catLabel !== guideFilters.category) return false;
+        }
+        if (guideFilters.search) {
+          const q = guideFilters.search.toLowerCase();
+          if (!`${g.title || ""} ${g.subtitle || ""}`.toLowerCase().includes(q)) return false;
+        }
+        return true;
+      }),
+    [guides, guideFilters]
+  );
+
   const filteredUsers = useMemo(
     (): User[] =>
       (data?.users || []).filter((u: User) => {
@@ -1064,8 +1387,10 @@ useEffect(() => {
     { id: "orders", label: "Orders", icon: "🛒" },
     { id: "products", label: "Products", icon: "📦" },
     { id: "colleges", label: "Colleges", icon: "🎓" },
+    { id: "guide", label: "Guide", icon: "📘" },
     { id: "users", label: "Users", icon: "👥" },
     { id: "subscribers", label: "Subscribers", icon: "✉️" },
+    { id: "payments", label: "Payments", icon: "💳" },
   ];
 
   const statCards: StatCard[] = data
@@ -1077,6 +1402,7 @@ useEffect(() => {
         { label: "Vacancy Applications", value: data.vacancyApplications?.length || 0, color: "#00838f", bg: "#e0f7fa" },
         { label: "Job Applications", value: data.jobApplications?.length || 0, color: "#00838f", bg: "#e0f7fa" },
         { label: "Employee Interests", value: data.employeeInterests?.length || 0, color: "#00838f", bg: "#e0f7fa" },
+        { label: "Guides", value: guides.length, color: "#00509e", bg: "#e8f0fe" },
         { label: "Registered Users", value: data.users?.length || 0, color: "#00838f", bg: "#e0f7fa" },
         { label: "Subscribers", value: data.subscribers?.length || 0, color: "#7c3aed", bg: "#f3e8ff" },
       ]
@@ -1224,6 +1550,14 @@ useEffect(() => {
           color: #001a3d;
           margin-bottom: 15px;
           font-weight: 700;
+        }
+
+        .adm-card {
+          background: white;
+          border-radius: 12px;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+          padding: 22px 24px;
+          margin-bottom: 25px;
         }
 
         .adm-table-wrap {
@@ -2408,6 +2742,19 @@ useEffect(() => {
                               <strong>{group.name}</strong> · {group.email} · {group.phone || "No phone"}
                               <span className={`adm-tag ${statusClass(group.status)}`} style={{ marginLeft: "10px" }}>{group.status}</span>
                             </div>
+                            <div className="adm-order-meta" style={{ marginTop: "6px", fontSize: "0.85rem" }}>
+                              <span className={`adm-tag ${group.isPaid ? "adm-tag-green" : "adm-tag-orange"}`}>
+                                {group.isPaid ? "✓ Paid" : "Unpaid"}
+                              </span>
+                              <span style={{ marginLeft: "10px" }}>Payment: {group.paymentMethod || "Cash on Delivery"}</span>
+                              <button
+                                className={`adm-btn-sm ${group.isPaid ? "adm-btn-delete" : "adm-btn-edit"}`}
+                                style={{ marginLeft: "10px" }}
+                                onClick={() => updateOrderPayment(group.key, !group.isPaid)}
+                              >
+                                {group.isPaid ? "Mark Unpaid" : "Mark Paid"}
+                              </button>
+                            </div>
                             <div className="adm-order-address">
                               Ship to: {group.address || "N/A"}, {group.city || ""} {group.postalcode || ""}
                             </div>
@@ -2587,6 +2934,105 @@ useEffect(() => {
                   </>
                 )}
 
+                {activeTab === "guide" && (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", marginBottom: "15px" }}>
+                      <h2 className="adm-section-title" style={{ margin: 0 }}>Content Sections</h2>
+                      <button className="adm-btn-create" onClick={openCreateGuide}>+ Add Content</button>
+                    </div>
+                    <div className="adm-filter-bar" style={{ justifyContent: "flex-start", gap: "10px" }}>
+                      {(Object.keys(guideCategoryLabels) as string[]).map((cat: string) => (
+                        <button
+                          key={cat}
+                          className="adm-btn-sm adm-btn-edit"
+                          onClick={() => seedGuideCategory(cat)}
+                          title={`Seed default content for ${guideCategoryLabels[cat]}`}
+                        >
+                          Seed: {guideCategoryLabels[cat]}
+                        </button>
+                      ))}
+                      <button className="adm-btn-sm" onClick={seedDefaultGuide} style={{ background: "#003f7f", color: "#fff" }}>
+                        Seed All 4
+                      </button>
+                    </div>
+                    <AdmFilterBar
+                      search={guideFilters.search}
+                      setSearch={(v: string) => setGuideFilters({ ...guideFilters, search: v })}
+                      searchPlaceholder="Search title or subtitle..."
+                      selectValue={guideFilters.category}
+                      setSelect={(v: string) => setGuideFilters({ ...guideFilters, category: v })}
+                      selectOptions={guideCategories.map((c: string) => guideCategoryLabels[c] || c)}
+                      selectLabel="All Sections"
+                    />
+                    <div className="adm-table-wrap">
+                      <div className="adm-table-header">
+                        <h3>Guides / Sections</h3>
+                        <span className="count-badge">{filteredGuides.length}</span>
+                      </div>
+                      {filteredGuides.length > 0 ? (
+                        <table className="adm-data-table">
+                          <thead>
+                            <tr>
+                              <th>ID</th>
+                              <th>Title</th>
+                              <th>Section</th>
+                              <th>Chapters</th>
+                              <th>PDF</th>
+                              <th>Status</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredGuides.map((g: Guide) => (
+                              <tr key={g.id} style={g.active === false ? { opacity: 0.55 } : {}}>
+                                <td>{g.id}</td>
+                                <td style={{ fontWeight: 600 }}>{g.title}</td>
+                                <td>
+                                  <span className="adm-tag adm-tag-teal">
+                                    {guideCategoryLabels[g.category || "guide"] || g.category || "guide"}
+                                  </span>
+                                </td>
+                                <td>{Array.isArray(g.chapters) ? g.chapters.length : 0}</td>
+                                <td className="adm-text-truncate">
+                                  {g.pdfUrl ? (
+                                    <a href={g.pdfUrl} target="_blank" rel="noreferrer" style={{ color: "#004d99" }}>
+                                      View PDF
+                                    </a>
+                                  ) : (
+                                    "No PDF"
+                                  )}
+                                </td>
+                                <td>
+                                  <button
+                                    className={`adm-btn-sm ${g.active === false ? "adm-btn-delete" : "adm-btn-edit"}`}
+                                    onClick={() => handleToggleGuideActive(g)}
+                                  >
+                                    {g.active === false ? "Hidden" : "Active"}
+                                  </button>
+                                </td>
+                                <td>
+                                  <div className="adm-action-btns">
+                                    <button className="adm-btn-sm adm-btn-edit" onClick={() => openEditGuide(g)}>Edit</button>
+                                    <button className="adm-btn-sm adm-btn-delete" onClick={() => handleDeleteGuide(g.id)}>Delete</button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <div className="adm-empty">
+                          <span className="empty-icon">&#128214;</span>
+                          <p>No content yet. Add content or seed the default sections.</p>
+                          <button className="adm-btn-create adm-btn-outline" onClick={seedDefaultGuide} style={{ marginTop: "10px" }}>
+                            Seed All 4 Default Sections
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
                 {activeTab === "users" && (
                   <>
                     <h2 className="adm-section-title">Registered Users</h2>
@@ -2701,6 +3147,189 @@ useEffect(() => {
                           <span className="empty-icon">&#9993;</span>
                           <p>No subscribers yet</p>
                         </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {activeTab === "payments" && (
+                  <>
+                    <h2 className="adm-section-title">Payment Settings</h2>
+                    <div className="adm-card">
+                      <div className="adm-table-header" style={{ marginBottom: 18 }}>
+                        <h3>Integration Mode</h3>
+                      </div>
+                      <p style={{ fontSize: "0.9rem", color: "#666", marginBottom: 16 }}>
+                        Select how online payments are processed. In <strong>Demo</strong> mode, any 6-digit OTP is accepted
+                        (no real money). In <strong>Live</strong> mode, real payment processing is used for configured providers.
+                      </p>
+                      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+                        {([
+                          { id: "demo", label: "Demo (simulated)", desc: "Any 6-digit OTP works - for testing" },
+                          { id: "live", label: "Live (production)", desc: "Real payment processing for configured providers" },
+                        ] as const).map((m) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setPayMode(m.id)}
+                            style={{
+                              flex: "1 1 240px",
+                              padding: "14px",
+                              border: `2px solid ${payMode === m.id ? "#00509e" : "#e8e8e8"}`,
+                              borderRadius: "10px",
+                              background: payMode === m.id ? "#f0f7ff" : "#fff",
+                              cursor: "pointer",
+                              textAlign: "left",
+                              fontFamily: "'Poppins', sans-serif",
+                            }}
+                          >
+                            <div style={{ fontWeight: 700, color: payMode === m.id ? "#00509e" : "#001a3d" }}>{m.label}</div>
+                            <div style={{ fontSize: "0.8rem", color: "#888", marginTop: 4 }}>{m.desc}</div>
+                          </button>
+                        ))}
+                      </div>
+
+                      {payMode === "live" && (
+                        <>
+                          <div className="adm-form-group" style={{ marginBottom: 20 }}>
+                            <label>Khalti Credentials</label>
+                            <input
+                              type="text"
+                              value={khaltiPublicKey}
+                              onChange={(e) => setKhaltiPublicKey(e.target.value)}
+                              placeholder="Khalti Public Key (client-side)"
+                              style={{ marginBottom: 10 }}
+                            />
+                            <input
+                              type="password"
+                              value={khaltiSecretKey}
+                              onChange={(e) => setKhaltiSecretKey(e.target.value)}
+                              placeholder="Khalti Secret Key (server-side)"
+                            />
+                            <small style={{ color: "#888", fontSize: "0.8rem", display: "block", marginTop: 8 }}>
+                              Get these from developer.khalti.com. The secret key is stored encrypted and never exposed to customers.
+                            </small>
+                          </div>
+
+                          <div className="adm-form-group" style={{ marginBottom: 20 }}>
+                            <label>eSewa Credentials</label>
+                            <input
+                              type="text"
+                              value={esewaMerchantId}
+                              onChange={(e) => setEsewaMerchantId(e.target.value)}
+                              placeholder="eSewa Merchant ID"
+                              style={{ marginBottom: 10 }}
+                            />
+                            <input
+                              type="password"
+                              value={esewaSecretKey}
+                              onChange={(e) => setEsewaSecretKey(e.target.value)}
+                              placeholder="eSewa Secret Key"
+                            />
+                            <small style={{ color: "#888", fontSize: "0.8rem", display: "block", marginTop: 8 }}>
+                              Get these from the eSewa merchant portal. The secret key is stored encrypted and never exposed to customers.
+                            </small>
+                          </div>
+
+                          <div className="adm-form-group">
+                            <label>FonePay Credentials</label>
+                            <input
+                              type="text"
+                              value={fonepayMerchantId}
+                              onChange={(e) => setFonepayMerchantId(e.target.value)}
+                              placeholder="FonePay Merchant ID"
+                              style={{ marginBottom: 10 }}
+                            />
+                            <input
+                              type="password"
+                              value={fonepaySecretKey}
+                              onChange={(e) => setFonepaySecretKey(e.target.value)}
+                              placeholder="FonePay Secret Key"
+                            />
+                            <small style={{ color: "#888", fontSize: "0.8rem", display: "block", marginTop: 8 }}>
+                              Get these from the FonePay merchant portal. The secret key is stored encrypted and never exposed to customers.
+                            </small>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="adm-card">
+                      <div className="adm-table-header" style={{ marginBottom: 14 }}>
+                        <h3>Enabled Payment Methods</h3>
+                      </div>
+                      <p style={{ fontSize: "0.9rem", color: "#666", marginBottom: 14 }}>
+                        Toggle which payment options customers see at checkout.
+                      </p>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        {ALL_PAYMENT_METHODS.map((pm) => {
+                          const enabled = payMethods.includes(pm.id);
+                          return (
+                            <label
+                              key={pm.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 12,
+                                padding: "12px 14px",
+                                border: "2px solid #e8e8e8",
+                                borderRadius: "10px",
+                                cursor: "pointer",
+                                background: enabled ? "#f0f7ff" : "#fff",
+                                fontFamily: "'Poppins', sans-serif",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={enabled}
+                                onChange={() =>
+                                  setPayMethods((prev) =>
+                                    enabled ? prev.filter((m) => m !== pm.id) : [...prev, pm.id]
+                                  )
+                                }
+                              />
+                              <span style={{ fontSize: "1.1rem" }}>{pm.icon}</span>
+                              <span style={{ fontWeight: 600, color: "#001a3d" }}>{pm.label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      {payMethods.length === 0 && (
+                        <p style={{ color: "#c62828", fontSize: "0.85rem", marginTop: 10 }}>
+                          At least one payment method must be enabled.
+                        </p>
+                      )}
+                    </div>
+
+                    {paySettingsMsg && (
+                      <div
+                        style={{
+                          padding: "12px 14px",
+                          borderRadius: "8px",
+                          marginTop: 16,
+                          fontSize: "0.9rem",
+                          background: paySettingsMsg.type === "success" ? "#e6f9ee" : "#fff0f0",
+                          color: paySettingsMsg.type === "success" ? "#0a7e3f" : "#c62828",
+                          border: `1px solid ${paySettingsMsg.type === "success" ? "#b8e6c8" : "#f5c6c6"}`,
+                        }}
+                      >
+                        {paySettingsMsg.text}
+                      </div>
+                    )}
+
+                    <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 16 }}>
+                      <button
+                        className="adm-btn-create"
+                        disabled={savingPaySettings || payMethods.length === 0}
+                        onClick={savePaymentSettings}
+                        style={{ opacity: savingPaySettings || payMethods.length === 0 ? 0.6 : 1 }}
+                      >
+                        {savingPaySettings ? "Saving..." : "Save Payment Settings"}
+                      </button>
+                      {paymentSettings && (
+                        <span style={{ fontSize: "0.85rem", color: "#888" }}>
+                          Current mode: <strong>{payMode === "live" ? "Live (production)" : "Demo"}</strong>
+                        </span>
                       )}
                     </div>
                   </>
@@ -3023,6 +3652,111 @@ useEffect(() => {
                     <button type="button" className="adm-form-cancel" onClick={closeCollegeForm}>Cancel</button>
                     <button type="submit" className="adm-form-save" disabled={savingCollege}>
                       {savingCollege ? "Saving..." : editingCollege ? "Update College" : "Create College"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showGuideForm && (
+          <div className="adm-modal-overlay" onClick={(e: React.MouseEvent<HTMLDivElement>) => {
+            if (e.target === e.currentTarget) closeGuideForm();
+          }}>
+            <div className="adm-modal">
+              <div className="adm-modal-header">
+                <h2>{editingGuide ? "Edit Content" : "Create New Content"}</h2>
+                <button className="adm-modal-close" onClick={closeGuideForm}>&times;</button>
+              </div>
+              <div className="adm-modal-body">
+                <form onSubmit={handleSaveGuide}>
+                  <div className="adm-form-group">
+                    <label>Guide Title *</label>
+                    <input
+                      type="text"
+                      name="title"
+                      value={guideForm.title}
+                      onChange={handleGuideFormChange}
+                      placeholder="e.g. Cabin Crew Training Guide"
+                      required
+                    />
+                  </div>
+                  <div className="adm-form-group">
+                    <label>Subtitle</label>
+                    <textarea
+                      name="subtitle"
+                      value={guideForm.subtitle}
+                      onChange={handleGuideFormChange}
+                      placeholder="A short description shown under the title"
+                      rows={2}
+                    ></textarea>
+                  </div>
+                  <div className="adm-form-group">
+                    <label>Section *</label>
+                    <select
+                      name="category"
+                      value={guideForm.category}
+                      onChange={handleGuideFormChange}
+                    >
+                      {guideCategories.map((cat: string) => (
+                        <option key={cat} value={cat}>
+                          {guideCategoryLabels[cat] || cat}
+                        </option>
+                      ))}
+                    </select>
+                    <div style={{ fontSize: "12px", color: "#666", marginTop: "4px" }}>
+                      This determines which page the content appears on.
+                    </div>
+                  </div>
+                  <div className="adm-form-group">
+                    <label>Chapters (JSON array)</label>
+                    <textarea
+                      name="chapters"
+                      value={guideForm.chapters}
+                      onChange={handleGuideFormChange}
+                      placeholder={JSON.stringify(
+                        [
+                          { heading: "Chapter 1 — Grooming", body: "Short intro", items: ["Tip one", "Tip two"] },
+                        ],
+                        null,
+                        2
+                      )}
+                      rows={10}
+                    ></textarea>
+                    <div style={{ fontSize: "12px", color: "#666", marginTop: "4px" }}>
+                      Format: [{"{ \"heading\": \"...\", \"body\": \"...\", \"items\": [\"...\"] }"}] — leave empty to create
+                      without chapters.
+                    </div>
+                  </div>
+                  <div className="adm-form-group">
+                    <label>PDF File (optional)</label>
+                    <input
+                      type="file"
+                      accept="application/pdf,.pdf"
+                      onChange={handleGuidePdfChange}
+                    />
+                    <div style={{ fontSize: "12px", color: "#666", marginTop: "4px" }}>
+                      {editingGuide && editingGuide.pdfUrl
+                        ? "A PDF is already uploaded. Select a new file to replace it."
+                        : "Optional: upload a PDF so users can download this section."}
+                    </div>
+                  </div>
+                  <div className="adm-form-group">
+                    <label style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        name="active"
+                        checked={guideForm.active}
+                        onChange={handleGuideFormChange}
+                      />
+                      Active (visible on its section page)
+                    </label>
+                  </div>
+                  <div className="adm-form-actions">
+                    <button type="button" className="adm-form-cancel" onClick={closeGuideForm}>Cancel</button>
+                    <button type="submit" className="adm-form-save" disabled={savingGuide}>
+                      {savingGuide ? "Saving..." : editingGuide ? "Update Guide" : "Create Guide"}
                     </button>
                   </div>
                 </form>

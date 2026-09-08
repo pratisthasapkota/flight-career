@@ -1,106 +1,105 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import axios from "axios";
 import "./Guide.css";
 
+interface GuideChapter {
+  heading: string;
+  body?: string;
+  items: string[];
+}
+
+interface GuideData {
+  id: number | string;
+  title: string;
+  subtitle: string | null;
+  chapters: GuideChapter[];
+  pdfUrl: string | null;
+  active: boolean;
+  updatedAt?: string;
+}
+
 const Finals: React.FC = () => {
+  const backendUrl: string =
+    process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+  const [guide, setGuide] = useState<GuideData | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await axios.get<{ success: boolean; data: GuideData }>(
+          `${backendUrl}/api/guide/byCategory/guide`
+        );
+        if (res.data.success && res.data.data) {
+          setGuide(res.data.data);
+        }
+      } catch {
+        // leave guide null
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="guide-wrapper">
+        <div className="guide-container">Loading guide...</div>
+      </div>
+    );
+  }
+
+  const title = guide?.title || "Cabin Crew Training Guide – Become Interview Ready";
+  const subtitle =
+    guide?.subtitle ||
+    "A complete book-style guide for grooming, communication, aviation etiquette, interview tips & sample answers — all in one page.";
+
   return (
     <div className="guide-wrapper">
       <div className="guide-container">
-        <h1 className="guide-title">Cabin Crew Training Guide – Become Interview Ready</h1>
-        <p className="guide-subtitle">
-          A complete book-style guide for grooming, communication, aviation etiquette,
-          interview tips & sample answers — all in one page.
-        </p>
-
-        <section>
-          <h2>Chapter 1 — Grooming & Professional Appearance</h2>
-          <p>
-            Grooming is the first thing recruiters notice — even before you speak.
-            Cabin crew are the face of the airline, so appearance must reflect discipline,
-            hygiene and confidence.
+        {guide?.pdfUrl && (
+          <p style={{ marginBottom: "25px" }}>
+            <a
+              className="guide-pdf-btn"
+              href={guide.pdfUrl}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                display: "inline-block",
+                background: "#004d99",
+                color: "#fff",
+                padding: "12px 22px",
+                borderRadius: "8px",
+                fontWeight: 600,
+                textDecoration: "none",
+              }}
+            >
+              ⬇ Download the Full Guide (PDF)
+            </a>
           </p>
-          <ul>
-            <li>Neat and tidy hair; no flyaways</li>
-            <li>Subtle & natural makeup for females — professional shave for males</li>
-            <li>Well-fitted formal clothes (navy / white / black)</li>
-            <li>Good posture, soft smile, and professional elegance</li>
-          </ul>
-        </section>
+        )}
+        <h1 className="guide-title">{title}</h1>
+        <p className="guide-subtitle">{subtitle}</p>
 
-        <section>
-          <h2>Chapter 2 — Communication & Aviation Etiquette</h2>
-          <p>
-            Airlines observe how you speak, listen, and interact. Communication must be
-            polite, calm and confident — especially under pressure.
-          </p>
-          <ul>
-            <li>Speak slowly and clearly — no filler words (umm, ahh, etc.)</li>
-            <li>Use formal and respectful greetings</li>
-            <li>Maintain eye contact but not aggressively</li>
-            <li>Listen patiently before answering</li>
-            <li>Never interrupt the interviewer or passengers</li>
-          </ul>
-        </section>
-
-        <section>
-          <h2>Chapter 3 — Purpose of Cabin Crew</h2>
-          <p>
-            Many candidates think cabin crew is mainly hospitality — but <strong>safety is the main
-            responsibility.</strong> Hospitality comes after safety and security protocols.
-          </p>
-          <ol>
-            <li>Handle onboard emergencies</li>
-            <li>Follow safety procedures & briefings</li>
-            <li>Reassure and calm passengers</li>
-            <li>Provide professional and friendly customer service</li>
-          </ol>
-        </section>
-
-        <section>
-          <h2>Chapter 4 — Most Important Interview Question</h2>
-          <p><strong>Q: Why should we hire you as a cabin crew?</strong></p>
-          <p className="highlight-box">
-            "You should hire me because I genuinely enjoy helping people.
-            I stay calm in stressful situations and work well in a team.
-            I quickly adapt to new environments and represent the airline with
-            confidence, respect and professionalism. I believe every passenger
-            deserves a pleasant flying experience — and I am committed to that."
-          </p>
-        </section>
-
-        <section>
-          <h2>Chapter 5 — Frequent Mistakes Candidates Make</h2>
-          <ul>
-            <li>Walking in with no smile / nervous body language</li>
-            <li>Memorizing answers instead of speaking naturally</li>
-            <li>Wearing heavy perfume, dark lipstick or flashy accessories</li>
-            <li>Talking too much instead of answering precisely</li>
-            <li>Not researching about the airline</li>
-          </ul>
-        </section>
-
-        <section>
-          <h2>Chapter 6 — Aviation Behaviour & First Impression</h2>
-          <p>
-            The interview begins the moment you enter the room — not when you sit.
-            Your walk, smile, confidence and politeness build the first impression.
-          </p>
-          <ul>
-            <li>Knock softly → greet politely → take permission to sit</li>
-            <li>Be calm and graceful while speaking</li>
-            <li>Smile naturally but not continuously</li>
-            <li>Always thank the interviewer before leaving</li>
-          </ul>
-        </section>
-
-        <section>
-          <h2>Final Message from the Aviation Industry</h2>
-          <p>
-            Becoming a cabin crew is not about perfection — it is about progress.
-            If you focus on grooming, communication, confidence and calmness,
-            you will stand out automatically. Believe in yourself, practice daily
-            and act like the professional you dream to become.
-          </p>
-        </section>
+        {Array.isArray(guide?.chapters) && guide.chapters.length > 0 ? (
+          guide.chapters.map((ch: GuideChapter, idx: number) => (
+            <section key={idx}>
+              <h2>{ch.heading}</h2>
+              {ch.body && <p>{ch.body}</p>}
+              {Array.isArray(ch.items) && ch.items.length > 0 && (
+                <ul>
+                  {ch.items.map((item: string, i: number) => (
+                    <li key={i}>{item}</li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          ))
+        ) : (
+          <p style={{ color: "#666" }}>No content has been added for this section yet.</p>
+        )}
 
         <section>
           <h2> Recommended Cabin Crew Books & Study Materials</h2>

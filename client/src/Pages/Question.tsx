@@ -1,8 +1,48 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import axios from "axios";
 import Navbar from "../Components/Navbar";
 import Footer from "../Components/Footer";
 
+interface GuideChapter {
+  heading: string;
+  body?: string;
+  items: string[];
+}
+
+interface GuideData {
+  id: number | string;
+  title: string;
+  subtitle: string | null;
+  chapters: GuideChapter[];
+  pdfUrl: string | null;
+  active: boolean;
+}
+
 const Question: React.FC = () => {
+  const backendUrl: string =
+    process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+  const [guide, setGuide] = useState<GuideData | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await axios.get<{ success: boolean; data: GuideData }>(
+          `${backendUrl}/api/guide/byCategory/questions`
+        );
+        if (res.data.success && res.data.data) {
+          setGuide(res.data.data);
+        }
+      } catch {
+        // leave null
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <>
       <style>{`
@@ -83,84 +123,53 @@ const Question: React.FC = () => {
       <Navbar />
 
       <div className="hero">
-        <h1>Cabin Crew Interview Questions & Sample Answers</h1>
-        <p>Frequently asked questions in real airline interviews — with expert answers.</p>
+        <h1>{guide?.title || "Cabin Crew Interview Questions & Sample Answers"}</h1>
+        <p>
+          {guide?.subtitle ||
+            "Frequently asked questions in real airline interviews — with expert answers."}
+        </p>
       </div>
 
+      {guide?.pdfUrl && (
+        <div className="box" style={{ padding: "20px", textAlign: "center" }}>
+          <a
+            href={guide.pdfUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: "inline-block",
+              background: "#004d99",
+              color: "#fff",
+              padding: "12px 22px",
+              borderRadius: "8px",
+              fontWeight: 600,
+              textDecoration: "none",
+            }}
+          >
+            ⬇ Download Questions & Answers (PDF)
+          </a>
+        </div>
+      )}
+
       <div className="box">
-        <div className="question">
-          <h3>1. Tell me about yourself.</h3>
-          <p>
-            Interviewers want confidence, personality and professionalism — not your life story.
-            Focus on your background, passion and skills relevant to aviation.
-          </p>
-          <div className="sample">
-            "My name is… I'm a confident communicator with a passion for customer service.
-            I enjoy helping people and adapting to new environments. I stay calm under pressure,
-            work well in a team, and I am excited to represent the airline professionally while
-            ensuring passengers feel valued and safe."
-          </div>
-        </div>
-
-        <div className="question">
-          <h3>2. Why do you want to become a cabin crew?</h3>
-          <p>
-            The answer must include: passion, service mindset, teamwork and emotional stability.
-          </p>
-          <div className="sample">
-            "I want to become a cabin crew because I enjoy serving people and creating positive
-            travel experiences. I work well under pressure, communicate calmly in challenging
-            situations and adapt quickly to new environments. I am motivated by teamwork and
-            would be proud to represent the airline's values with professionalism and care."
-          </div>
-        </div>
-
-        <div className="question">
-          <h3>3. What is good customer service?</h3>
-          <p>
-            Airlines observe maturity, empathy and awareness of passenger expectations.
-          </p>
-          <div className="sample">
-            "Good customer service means making every passenger feel respected, safe and cared for.
-            It includes listening patiently, communicating clearly, solving issues calmly and maintaining
-            professionalism even under stress. Small acts of kindness create memorable flying experiences."
-          </div>
-        </div>
-
-        <div className="question">
-          <h3>4. How do you handle an angry or difficult passenger?</h3>
-          <p>
-            Interviewers want to see calmness, teamwork and passenger safety awareness.
-          </p>
-          <div className="sample">
-            "I would remain calm and polite, listen without interrupting and acknowledge their concern.
-            I would apologize for the inconvenience and offer solutions within safety guidelines.
-            If needed, I would involve the senior crew to ensure the situation is handled smoothly
-            while staying professional throughout the interaction."
-          </div>
-        </div>
-
-        <div className="question">
-          <h3>5. What does teamwork mean to you?</h3>
-          <div className="sample">
-            "Teamwork means supporting each other to achieve a smooth and safe flight.
-            Onboard situations change quickly, so helping colleagues, communicating clearly
-            and remaining positive ensures the best experience for passengers and crew."
-          </div>
-        </div>
-
-        <div className="question">
-          <h3>6. Why should we hire you?</h3>
-          <div className="sample">
-            "You should hire me because I genuinely care about people, stay calm under pressure,
-            communicate clearly and work well in a team. I am committed to representing the airline
-            with professionalism, warmth and responsibility toward passengers' safety and comfort."
-          </div>
-        </div>
-
-        <p style={{ fontSize: "18px", marginTop: "30px", fontWeight: 600 }}>
-          🔜 More real airline interview questions are being added soon…
-        </p>
+        {loading ? (
+          <p>Loading questions...</p>
+        ) : Array.isArray(guide?.chapters) && guide.chapters.length > 0 ? (
+          guide.chapters.map((q: GuideChapter, idx: number) => (
+            <div className="question" key={idx}>
+              <h3>{q.heading}</h3>
+              {q.body && <p>{q.body}</p>}
+              {Array.isArray(q.items) &&
+                q.items.map((sample: string, i: number) => (
+                  <div className="sample" key={i}>
+                    {sample}
+                  </div>
+                ))}
+            </div>
+          ))
+        ) : (
+          <p style={{ color: "#666" }}>No questions added yet. Check back soon.</p>
+        )}
       </div>
 
       <div className="cta">
@@ -171,7 +180,7 @@ const Question: React.FC = () => {
           used by real airlines.
         </p>
 
-        <a href="/store" className="cta-btn">
+        <a href="/guide" className="cta-btn">
           Get the Full Guide →
         </a>
       </div>

@@ -1,9 +1,49 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import axios from "axios";
 import Navbar from "../Components/Navbar";
 import Footer from "../Components/Footer";
 import { Link } from "react-router-dom";
 
+interface GuideChapter {
+  heading: string;
+  body?: string;
+  items: string[];
+}
+
+interface GuideData {
+  id: number | string;
+  title: string;
+  subtitle: string | null;
+  chapters: GuideChapter[];
+  pdfUrl: string | null;
+  active: boolean;
+}
+
 const Tips: React.FC = () => {
+  const backendUrl: string =
+    process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+  const [guide, setGuide] = useState<GuideData | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await axios.get<{ success: boolean; data: GuideData }>(
+          `${backendUrl}/api/guide/byCategory/tips`
+        );
+        if (res.data.success && res.data.data) {
+          setGuide(res.data.data);
+        }
+      } catch {
+        // leave null
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <>
       <style>{`
@@ -89,81 +129,55 @@ const Tips: React.FC = () => {
       <Navbar />
 
       <div className="hero">
-        <h1>Cabin Crew Interview Tips</h1>
-        <p>Professional guidance to help you pass the interview on your first attempt.</p>
+        <h1>{guide?.title || "Cabin Crew Interview Tips"}</h1>
+        <p>
+          {guide?.subtitle ||
+            "Professional guidance to help you pass the interview on your first attempt."}
+        </p>
       </div>
 
+      {guide?.pdfUrl && (
+        <div className="tips-container" style={{ padding: "20px", textAlign: "center" }}>
+          <a
+            href={guide.pdfUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: "inline-block",
+              background: "#004d99",
+              color: "#fff",
+              padding: "12px 22px",
+              borderRadius: "8px",
+              fontWeight: 600,
+              textDecoration: "none",
+            }}
+          >
+            ⬇ Download Tips (PDF)
+          </a>
+        </div>
+      )}
+
       <div className="tips-container">
-        <div className="tip">
-          <h3>1. First Impression Matters</h3>
-          <p>
-            Your appearance and body language create your reputation before you even speak.
-            Maintain a warm smile, walk confidently, greet politely, and stay calm.
-          </p>
-          <div className="highlight-box">
-             Interviewers decide 70% of your impression within the first 10 seconds.
-          </div>
-        </div>
-
-        <div className="tip">
-          <h3>2. Speak Confidently</h3>
-          <p>
-            Use a clear tone, maintain natural speed, and keep your sentences short.
-            Avoid fillers like "umm", "ahh", "like", "you know".
-          </p>
-          <p style={{ marginTop: "8px" }}>
-            Practice your introduction daily in front of a mirror or camera.
-          </p>
-        </div>
-
-        <div className="tip">
-          <h3>3. Maintain Eye Contact</h3>
-          <p>
-            Eye contact shows confidence and honesty. Do not stare — look natural,
-            calm, and friendly while answering.
-          </p>
-        </div>
-
-        <div className="tip">
-          <h3>4. Master Situational Questions</h3>
-          <p>
-            Cabin crew interviews include real-life situations such as handling a rude
-            passenger, medical emergency, crying baby, or seat dispute.
-          </p>
-          <p>
-            Use the <strong>STAR Method:</strong> Situation – Task – Action – Result
-            to structure your answers in a professional way.
-          </p>
-        </div>
-
-        <div className="tip">
-          <h3>5. Know About the Airline</h3>
-          <p>
-            Research the airline before the interview. Learn about its destinations,
-            aircraft type, slogan, awards, CEO, and customer service values.
-          </p>
-        </div>
-
-        <div className="tip">
-          <h3>6. Smile and Stay Positive — Even if You Make Mistakes</h3>
-          <p>
-            Interviewers observe emotional stability — not perfection.
-            A calm and positive attitude is more valuable than a perfect answer.
-          </p>
-        </div>
-
-        <div className="check-section">
-          <h2 className="check-title"> Mini Checklist Before Interview</h2>
-          <ul className="check-list">
-            <li>Neat grooming and fresh appearance</li>
-            <li>Formal and well-fitting outfit</li>
-            <li>Soft makeup and minimal accessories (if applicable)</li>
-            <li>Updated CV in a professional folder</li>
-            <li>Comfortable formal shoes</li>
-            <li>Printed passport copy (if available)</li>
-            <li>Practice introduction & "Why should we hire you?"</li>
-          </ul>
-        </div>
+        {loading ? (
+          <p>Loading tips...</p>
+        ) : Array.isArray(guide?.chapters) && guide.chapters.length > 0 ? (
+          guide.chapters.map((tip: GuideChapter, idx: number) => (
+            <div className="tip" key={idx}>
+              <h3>
+                {tip.heading}
+              </h3>
+              {tip.body && <p>{tip.body}</p>}
+              {Array.isArray(tip.items) &&
+                tip.items.map((item: string, i: number) => (
+                  <div className="highlight-box" key={i}>
+                    {item}
+                  </div>
+                ))}
+            </div>
+          ))
+        ) : (
+          <p style={{ color: "#666" }}>No tips added yet. Check back soon.</p>
+        )}
       </div>
 
       <div className="cta">
@@ -174,7 +188,7 @@ const Tips: React.FC = () => {
           and real questions asked by international airlines.
         </p>
 
-        <Link to="/store" className="cta-btn">
+        <Link to="/guide" className="cta-btn">
           Get the Full Guide →
         </Link>
       </div>
