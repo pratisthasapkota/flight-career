@@ -145,6 +145,14 @@ export const paymentSettings = pgTable("payment_settings", {
   updatedAt: varchar("updated_at", { length: 50 }),
 });
 
+export const faq = pgTable("faq", {
+  id: serial("id").primaryKey(),
+  question: varchar("question", { length: 500 }).notNull(),
+  answer: text("answer").notNull(),
+  active: boolean("active").default(true),
+  sortOrder: integer("sort_order").default(0),
+});
+
 export const guide = pgTable("guide", {
   id: serial("id").primaryKey(),
   title: varchar("title", { length: 255 }).notNull(),

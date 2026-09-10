@@ -147,6 +147,14 @@ interface Guide {
   updatedAt?: string;
 }
 
+interface Faq {
+  id: number | string;
+  question: string;
+  answer: string;
+  active: boolean;
+  sortOrder: number | null;
+}
+
 interface PaymentSettings {
   mode: "demo" | "khalti" | "live";
   enabledMethods: string[];
@@ -210,6 +218,13 @@ interface GuideForm {
   active: boolean;
 }
 
+interface FaqForm {
+  question: string;
+  answer: string;
+  active: boolean;
+  sortOrder: string;
+}
+
 const guideCategories: string[] = [
   "guide",
   "course",
@@ -265,6 +280,10 @@ interface ProductFilters {
 }
 
 interface CollegeFilters {
+  search: string;
+}
+
+interface FaqFilters {
   search: string;
 }
 
@@ -332,6 +351,13 @@ const emptyCollege: CollegeForm = {
   description: "",
   features: "",
   active: true,
+};
+
+const emptyFaq: FaqForm = {
+  question: "",
+  answer: "",
+  active: true,
+  sortOrder: "0",
 };
 
 const emptyGuide: GuideForm = {
@@ -508,6 +534,13 @@ const AdminDashboard = () => {
   const [collegeForm, setCollegeForm] = useState<CollegeForm>({ ...emptyCollege });
   const [savingCollege, setSavingCollege] = useState<boolean>(false);
 
+  const [faqs, setFaqs] = useState<Faq[]>([]);
+  const [showFaqForm, setShowFaqForm] = useState<boolean>(false);
+  const [editingFaq, setEditingFaq] = useState<Faq | null>(null);
+  const [faqForm, setFaqForm] = useState<FaqForm>({ ...emptyFaq });
+  const [savingFaq, setSavingFaq] = useState<boolean>(false);
+  const [faqFilters, setFaqFilters] = useState<FaqFilters>({ search: "" });
+
   const [guides, setGuides] = useState<Guide[]>([]);
   const [showGuideForm, setShowGuideForm] = useState<boolean>(false);
   const [editingGuide, setEditingGuide] = useState<Guide | null>(null);
@@ -576,10 +609,11 @@ useEffect(() => {
           return;
         }
         setData(res.data.data ?? null);
-        const [catRes, colRes, guideRes] = await Promise.all([
+        const [catRes, colRes, guideRes, faqRes] = await Promise.all([
           axios.get<{ data: Product[] }>(`${backendUrl}/api/products`).catch(() => null),
           axios.get<{ data: College[] }>(`${backendUrl}/api/colleges`).catch(() => null),
           axios.get<{ data: Guide[] }>(`${backendUrl}/api/guide`).catch(() => null),
+          axios.get<{ success: boolean; data: Faq[] }>(`${backendUrl}/api/faq/all`, withCreds).catch(() => null),
         ]);
         if (catRes && Array.isArray(catRes.data.data)) {
           setCatalog(catRes.data.data);
@@ -589,6 +623,9 @@ useEffect(() => {
         }
         if (guideRes && Array.isArray(guideRes.data.data)) {
           setGuides(guideRes.data.data);
+        }
+        if (faqRes && Array.isArray(faqRes.data.data)) {
+          setFaqs(faqRes.data.data);
         }
         try {
           const payRes = await axios.get<{ success: boolean; data: PaymentSettings }>(`${backendUrl}/api/admin/payment-settings`, withCreds);
@@ -618,11 +655,12 @@ useEffect(() => {
 
   const fetchData = async (): Promise<void> => {
     try {
-      const [appsRes, catRes, colRes, guideRes] = await Promise.all([
+      const [appsRes, catRes, colRes, guideRes, faqRes] = await Promise.all([
         axios.get<{ success: boolean; data: AdminData }>(`${backendUrl}/api/admin/applications`, withCreds),
         axios.get<{ data: Product[] }>(`${backendUrl}/api/products`).catch(() => null),
         axios.get<{ data: College[] }>(`${backendUrl}/api/colleges`).catch(() => null),
         axios.get<{ data: Guide[] }>(`${backendUrl}/api/guide`).catch(() => null),
+        axios.get<{ success: boolean; data: Faq[] }>(`${backendUrl}/api/faq/all`, withCreds).catch(() => null),
       ]);
       if (!appsRes.data.success) {
         navigate("/admin/login");
@@ -637,6 +675,9 @@ useEffect(() => {
       }
       if (guideRes && Array.isArray(guideRes.data.data)) {
         setGuides(guideRes.data.data);
+      }
+      if (faqRes && Array.isArray(faqRes.data.data)) {
+        setFaqs(faqRes.data.data);
       }
     } catch (err: any) {
       if (err.response?.status === 401) {
@@ -946,6 +987,94 @@ useEffect(() => {
     } catch (err) {
       console.error("Failed to toggle college", err);
       alert("Failed to update college");
+    }
+  };
+
+  const faqToPayload = (f: FaqForm): Record<string, unknown> => ({
+    question: f.question,
+    answer: f.answer,
+    active: f.active,
+    sortOrder: Number(f.sortOrder) || 0,
+  });
+
+  const openCreateFaq = (): void => {
+    setEditingFaq(null);
+    setFaqForm({ ...emptyFaq });
+    setShowFaqForm(true);
+  };
+
+  const openEditFaq = (f: Faq): void => {
+    setEditingFaq(f);
+    setFaqForm({
+      question: f.question || "",
+      answer: f.answer || "",
+      active: f.active !== false,
+      sortOrder: String(f.sortOrder ?? 0),
+    });
+    setShowFaqForm(true);
+  };
+
+  const closeFaqForm = (): void => {
+    setShowFaqForm(false);
+    setEditingFaq(null);
+    setFaqForm({ ...emptyFaq });
+  };
+
+  const handleFaqFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>): void => {
+    const { name, value, type, checked } = e.target as HTMLInputElement;
+    setFaqForm((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  };
+
+  const handleSaveFaq = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    e.preventDefault();
+    setSavingFaq(true);
+    try {
+      if (editingFaq) {
+        await axios.put(`${backendUrl}/api/faq/${editingFaq.id}`, faqToPayload(faqForm), withCreds);
+      } else {
+        await axios.post(`${backendUrl}/api/faq`, faqToPayload(faqForm), withCreds);
+      }
+      await fetchData();
+      closeFaqForm();
+    } catch (err: any) {
+      console.error("Failed to save FAQ", err);
+      alert(err.response?.data?.message || "Failed to save FAQ");
+    } finally {
+      setSavingFaq(false);
+    }
+  };
+
+  const handleDeleteFaq = async (id: number | string): Promise<void> => {
+    if (!window.confirm("Are you sure you want to delete this FAQ?")) return;
+    try {
+      await axios.delete(`${backendUrl}/api/faq/${id}`, withCreds);
+      await fetchData();
+    } catch (err) {
+      console.error("Failed to delete FAQ", err);
+      alert("Failed to delete FAQ");
+    }
+  };
+
+  const handleToggleFaqActive = async (f: Faq): Promise<void> => {
+    try {
+      await axios.put(`${backendUrl}/api/faq/${f.id}`, { ...f, active: !f.active }, withCreds);
+      await fetchData();
+    } catch (err) {
+      console.error("Failed to toggle FAQ", err);
+      alert("Failed to update FAQ");
+    }
+  };
+
+  const seedFaq = async (): Promise<void> => {
+    try {
+      await axios.post(`${backendUrl}/api/faq/seed`, {}, withCreds);
+      await fetchData();
+    } catch (err: any) {
+      console.error("Failed to seed FAQs", err);
+      alert(err.response?.data?.message || "Failed to seed FAQs");
     }
   };
 
@@ -1278,6 +1407,18 @@ useEffect(() => {
     [colleges, collegeFilters]
   );
 
+  const filteredFaqs = useMemo(
+    (): Faq[] =>
+      faqs.filter((f: Faq) => {
+        if (faqFilters.search) {
+          const q = faqFilters.search.toLowerCase();
+          if (!`${f.question || ""} ${f.answer || ""}`.toLowerCase().includes(q)) return false;
+        }
+        return true;
+      }),
+    [faqs, faqFilters]
+  );
+
   const filteredGuides = useMemo(
     (): Guide[] =>
       guides.filter((g: Guide) => {
@@ -1388,6 +1529,7 @@ useEffect(() => {
     { id: "products", label: "Products", icon: "📦" },
     { id: "colleges", label: "Colleges", icon: "🎓" },
     { id: "guide", label: "Guide", icon: "📘" },
+    { id: "faq", label: "FAQ", icon: "❓" },
     { id: "users", label: "Users", icon: "👥" },
     { id: "subscribers", label: "Subscribers", icon: "✉️" },
     { id: "payments", label: "Payments", icon: "💳" },
@@ -1403,6 +1545,7 @@ useEffect(() => {
         { label: "Job Applications", value: data.jobApplications?.length || 0, color: "#00838f", bg: "#e0f7fa" },
         { label: "Employee Interests", value: data.employeeInterests?.length || 0, color: "#00838f", bg: "#e0f7fa" },
         { label: "Guides", value: guides.length, color: "#00509e", bg: "#e8f0fe" },
+        { label: "FAQs", value: faqs.length, color: "#00509e", bg: "#e8f0fe" },
         { label: "Registered Users", value: data.users?.length || 0, color: "#00838f", bg: "#e0f7fa" },
         { label: "Subscribers", value: data.subscribers?.length || 0, color: "#7c3aed", bg: "#f3e8ff" },
       ]
@@ -3033,6 +3176,75 @@ useEffect(() => {
                   </>
                 )}
 
+                {activeTab === "faq" && (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", marginBottom: "15px" }}>
+                      <h2 className="adm-section-title" style={{ margin: 0 }}>FAQ Management</h2>
+                      <div style={{ display: "flex", gap: "10px" }}>
+                        <button className="adm-btn-create adm-btn-outline" onClick={seedFaq}>Seed Default FAQs</button>
+                        <button className="adm-btn-create" onClick={openCreateFaq}>+ Add Question</button>
+                      </div>
+                    </div>
+                    <AdmFilterBar
+                      search={faqFilters.search}
+                      setSearch={(v: string) => setFaqFilters({ search: v })}
+                      searchPlaceholder="Search question or answer..."
+                    />
+                    <div className="adm-table-wrap">
+                      <div className="adm-table-header">
+                        <h3>Questions & Answers</h3>
+                        <span className="count-badge">{filteredFaqs.length}</span>
+                      </div>
+                      {filteredFaqs.length > 0 ? (
+                        <table className="adm-data-table">
+                          <thead>
+                            <tr>
+                              <th>ID</th>
+                              <th>Order</th>
+                              <th>Question</th>
+                              <th>Answer</th>
+                              <th>Status</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredFaqs.map((f: Faq) => (
+                              <tr key={f.id} style={f.active === false ? { opacity: 0.55 } : {}}>
+                                <td>{f.id}</td>
+                                <td>{f.sortOrder ?? 0}</td>
+                                <td style={{ fontWeight: 600 }}>{f.question}</td>
+                                <td className="adm-text-truncate">{f.answer}</td>
+                                <td>
+                                  <button
+                                    className={`adm-btn-sm ${f.active === false ? "adm-btn-delete" : "adm-btn-edit"}`}
+                                    onClick={() => handleToggleFaqActive(f)}
+                                  >
+                                    {f.active === false ? "Hidden" : "Active"}
+                                  </button>
+                                </td>
+                                <td>
+                                  <div className="adm-action-btns">
+                                    <button className="adm-btn-sm adm-btn-edit" onClick={() => openEditFaq(f)}>Edit</button>
+                                    <button className="adm-btn-sm adm-btn-delete" onClick={() => handleDeleteFaq(f.id)}>Delete</button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <div className="adm-empty">
+                          <span className="empty-icon">&#10067;</span>
+                          <p>No FAQs yet. Add your first question or seed the default FAQs.</p>
+                          <button className="adm-btn-create adm-btn-outline" onClick={seedFaq} style={{ marginTop: "10px" }}>
+                            Seed Default FAQs
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
                 {activeTab === "users" && (
                   <>
                     <h2 className="adm-section-title">Registered Users</h2>
@@ -3652,6 +3864,73 @@ useEffect(() => {
                     <button type="button" className="adm-form-cancel" onClick={closeCollegeForm}>Cancel</button>
                     <button type="submit" className="adm-form-save" disabled={savingCollege}>
                       {savingCollege ? "Saving..." : editingCollege ? "Update College" : "Create College"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showFaqForm && (
+          <div className="adm-modal-overlay" onClick={(e: React.MouseEvent<HTMLDivElement>) => {
+            if (e.target === e.currentTarget) closeFaqForm();
+          }}>
+            <div className="adm-modal">
+              <div className="adm-modal-header">
+                <h2>{editingFaq ? "Edit FAQ" : "Create New FAQ"}</h2>
+                <button className="adm-modal-close" onClick={closeFaqForm}>&times;</button>
+              </div>
+              <div className="adm-modal-body">
+                <form onSubmit={handleSaveFaq}>
+                  <div className="adm-form-group">
+                    <label>Question *</label>
+                    <textarea
+                      name="question"
+                      value={faqForm.question}
+                      onChange={handleFaqFormChange}
+                      placeholder="e.g. What qualifications do I need to become a cabin crew member?"
+                      rows={3}
+                      required
+                    ></textarea>
+                  </div>
+                  <div className="adm-form-group">
+                    <label>Answer *</label>
+                    <textarea
+                      name="answer"
+                      value={faqForm.answer}
+                      onChange={handleFaqFormChange}
+                      placeholder="Provide a clear answer to this question"
+                      rows={5}
+                      required
+                    ></textarea>
+                  </div>
+                  <div className="adm-form-group">
+                    <label>Display Order</label>
+                    <input
+                      type="number"
+                      name="sortOrder"
+                      value={faqForm.sortOrder}
+                      onChange={handleFaqFormChange}
+                      placeholder="e.g. 1 (lower numbers appear first)"
+                      min={0}
+                    />
+                  </div>
+                  <div className="adm-form-group">
+                    <label style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        name="active"
+                        checked={faqForm.active}
+                        onChange={handleFaqFormChange}
+                      />
+                      Active (visible on the FAQ page)
+                    </label>
+                  </div>
+                  <div className="adm-form-actions">
+                    <button type="button" className="adm-form-cancel" onClick={closeFaqForm}>Cancel</button>
+                    <button type="submit" className="adm-form-save" disabled={savingFaq}>
+                      {savingFaq ? "Saving..." : editingFaq ? "Update FAQ" : "Create FAQ"}
                     </button>
                   </div>
                 </form>

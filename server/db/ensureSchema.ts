@@ -191,5 +191,19 @@ export async function ensureSchema(): Promise<void> {
     console.error("ensureSchema guide category alter skipped:", (err as Error).message);
   }
 
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS faq (
+        id SERIAL PRIMARY KEY,
+        question VARCHAR(500) NOT NULL,
+        answer TEXT NOT NULL,
+        active BOOLEAN DEFAULT true,
+        sort_order INTEGER DEFAULT 0
+      );
+    `);
+  } catch (err) {
+    console.error("ensureSchema faq skipped:", (err as Error).message);
+  }
+
   console.log("Database schema is up to date");
 }

@@ -27,6 +27,7 @@ import employeeInterestRoutes from "./routes/employeeInterest.js";
 import paymentRoutes from "./routes/payment.js";
 import collegesRoutes from "./routes/colleges.js";
 import guideRoutes from "./routes/guide.js";
+import faqRoutes from "./routes/faq.js";
 import { ensureSchema } from "./db/ensureSchema.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -251,6 +252,7 @@ app.use("/api/employee-interest", employeeInterestRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/colleges", collegesRoutes);
 app.use("/api/guide", guideRoutes);
+app.use("/api/faq", faqRoutes);
 
 // ---- 404 ----
 app.use((req: Request, res: Response) => {

@@ -1,27 +1,37 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import axios from "axios";
 
 interface FaqItem {
+  id: number | string;
   question: string;
   answer: string;
 }
 
-const faqData: FaqItem[] = [
-  { question: "What qualifications do I need to become a cabin crew member?", answer: "Most airlines require a minimum age of 18-21, a high school diploma, proficiency in English, and excellent physical fitness. Additional certifications like a cabin crew training certificate are often preferred." },
-  { question: "How long does pilot training take?", answer: "Pilot training duration varies. A Private Pilot License (PPL) takes about 2-3 months, while a Commercial Pilot License (CPL) can take 6-18 months. An Airline Transport Pilot License (ATPL) requires additional flight hours and can take 2-3 years total." },
-  { question: "Does AeroCareers provide job placement assistance?", answer: "Yes! We partner with multiple airlines and aviation companies to provide job placement assistance to our trained students. Our career services team helps with resume preparation, interview coaching, and connecting you with hiring partners." },
-  { question: "What training programs do you offer?", answer: "We offer comprehensive training programs including Pilot Training (PPL, CPL, ATPL), Cabin Crew Certification, Aircraft Maintenance Engineering, Flight Operations, and various short courses for aviation professionals." },
-  { question: "Are there scholarships available?", answer: "Yes, we offer merit-based scholarships and flexible payment plans for qualifying students. Contact our admissions team to learn more about available financial aid options." },
-  { question: "Can I work internationally after training?", answer: "Absolutely! Aviation is a global industry. Our certifications are recognized internationally, and many of our graduates work with airlines across Asia, the Middle East, Europe, and the Americas." },
-  { question: "What is the career growth path for cabin crew?", answer: "A typical cabin crew career path includes: Cabin Crew → Senior Cabin Crew → Cabin Crew Trainer → In-Flight Services Manager → Head of In-Flight Services. With additional qualifications, some transition to ground-based roles." },
-  { question: "How do I apply for job vacancies?", answer: "Visit our Vacancies page to see current openings. You can apply directly through the application links provided for each airline. We recommend setting up email alerts to stay updated on new opportunities." },
-];
-
 const FAQ = () => {
+  const [faqs, setFaqs] = useState<FaqItem[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+    axios
+      .get<{ success: boolean; data: FaqItem[] }>(`${backendUrl}/api/faq`)
+      .then((res) => {
+        if (res.data?.success && Array.isArray(res.data.data)) {
+          setFaqs(res.data.data);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load FAQs", err);
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   const toggleFAQ = (index: number): void => {
     setOpenIndex(openIndex === index ? null : index);
   };
+
+  const displayFaqs = loading ? [] : faqs;
 
   return (
     <>
@@ -183,17 +193,25 @@ const FAQ = () => {
         </div>
 
         <div className="faq-content">
-          {faqData.map((faq: FaqItem, index: number) => (
-            <div className={`faq-item ${openIndex === index ? "open" : ""}`} key={index}>
-              <div className="faq-question" onClick={() => toggleFAQ(index)}>
-                <span>{faq.question}</span>
-                <span className={`faq-toggle ${openIndex === index ? "open" : ""}`}>+</span>
-              </div>
-              <div className={`faq-answer ${openIndex === index ? "open" : ""}`}>
-                <p>{faq.answer}</p>
-              </div>
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "40px 0", color: "#555" }}>Loading FAQs...</div>
+          ) : displayFaqs.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "40px 0", color: "#555" }}>
+              No FAQs available at the moment.
             </div>
-          ))}
+          ) : (
+            displayFaqs.map((faq: FaqItem, index: number) => (
+              <div className={`faq-item ${openIndex === index ? "open" : ""}`} key={faq.id}>
+                <div className="faq-question" onClick={() => toggleFAQ(index)}>
+                  <span>{faq.question}</span>
+                  <span className={`faq-toggle ${openIndex === index ? "open" : ""}`}>+</span>
+                </div>
+                <div className={`faq-answer ${openIndex === index ? "open" : ""}`}>
+                  <p>{faq.answer}</p>
+                </div>
+              </div>
+            ))
+          )}
 
           <div className="faq-contact">
             <h3>Still have questions?</h3>
