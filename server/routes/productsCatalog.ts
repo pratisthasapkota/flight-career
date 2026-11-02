@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, asc, eq, type SQL } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { products } from "../db/schema.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -53,7 +53,22 @@ const productSchema = z.object({
 router.get(
   "/",
   asyncHandler(async (req: Request, res: Response) => {
-    const rows = await db.select().from(products);
+    const conditions: SQL[] = [];
+
+    if (req.query.active === "true" || req.query.active === "false") {
+      conditions.push(eq(products.active, req.query.active === "true"));
+    }
+
+    if (typeof req.query.category === "string" && req.query.category.trim()) {
+      conditions.push(eq(products.category, req.query.category.trim()));
+    }
+
+    const rows = await db
+      .select()
+      .from(products)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(asc(products.id));
+
     const items = rows.map((r) => ({
       ...r,
       price: Number(r.price),

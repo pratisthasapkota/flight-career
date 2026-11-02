@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { product, products, paymentSessions } from "../db/schema.js";
 import { sendEmail } from "../email.js";
@@ -80,6 +80,64 @@ router.post(
 
     const { name, email, address, city, postalCode, phone, paymentMethod, paymentSessionId, paymentTxnId, items } =
       parsed.data;
+    const productIds = items
+      .map((item) => item.productId)
+      .filter((id): id is number => typeof id === "number");
+
+    const catalogRows = productIds.length
+      ? await db.select().from(products).where(inArray(products.id, productIds))
+      : [];
+    const catalogById = new Map(catalogRows.map((row) => [row.id, row]));
+
+    type PricedItem = (typeof items)[number] & {
+      unitPrice: number;
+      productName: string;
+    };
+
+    let pricedItems: PricedItem[];
+    try {
+      pricedItems = items.map((item) => {
+        if (item.productId) {
+          const catalog = catalogById.get(item.productId);
+          if (!catalog || catalog.active === false) {
+            throw new Error("One of the products is no longer available");
+          }
+          const stock = catalog.stock ?? 0;
+          if (stock <= 0) {
+            throw new Error(`${catalog.name} is out of stock`);
+          }
+          if (item.quantity > stock) {
+            throw new Error(`Only ${stock} units of ${catalog.name} are available`);
+          }
+          return {
+            ...item,
+            unitPrice: Number(catalog.price || 0),
+            productName: catalog.name,
+          };
+        }
+
+        const unitPrice = Number(item.price ?? 0);
+        if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+          throw new Error("Invalid price for custom item");
+        }
+        return { ...item, unitPrice, productName: item.productname };
+      });
+    } catch (err) {
+      return res
+        .status(400)
+        .json({ success: false, message: (err as Error).message });
+    }
+
+    if (
+      paymentMethod !== "Cash on Delivery" &&
+      pricedItems.some((item) => !item.productId)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Online payment is only available for catalog products.",
+      });
+    }
+
     const orderId =
       "ORD-" +
       Date.now().toString(36).toUpperCase() +
@@ -128,8 +186,18 @@ router.post(
           .json({ success: false, message: "Payment method mismatch. Please restart checkout." });
       }
 
-      const expectedSubtotal = items.reduce(
-        (sum, it) => sum + Number(it.price || 0) * Number(it.quantity),
+      if (
+        session.customerEmail &&
+        session.customerEmail.toLowerCase() !== email.toLowerCase()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Payment session does not belong to this order.",
+        });
+      }
+
+      const expectedSubtotal = pricedItems.reduce(
+        (sum, it) => sum + it.unitPrice * Number(it.quantity),
         0
       );
       const expectedShipping = expectedSubtotal >= 150 ? 0 : 9.99;
@@ -147,28 +215,51 @@ router.post(
 
     type SavedItem = { productName: string; quantity: number; unitPrice: number; size: string };
 
-    const saved: SavedItem[] = await db.transaction(async (tx) => {
-      const rows: SavedItem[] = [];
-      for (const item of items) {
-        const quantity = Number(item.quantity);
+    let saved: SavedItem[];
+    try {
+      saved = await db.transaction(async (tx) => {
+        const rows: SavedItem[] = [];
 
-        if (item.productId) {
-          const catalog = await tx
-            .select()
-            .from(products)
-            .where(eq(products.id, item.productId));
-          if (catalog.length === 0 || catalog[0].active === false) {
-            throw new Error("Product is no longer available");
+        if (paymentSessionId && paymentMethod !== "Cash on Delivery") {
+          const claimed = await tx
+            .update(paymentSessions)
+            .set({ used: true })
+            .where(
+              and(
+                eq(paymentSessions.sessionId, paymentSessionId),
+                sql`COALESCE(${paymentSessions.used}, false) = false`
+              )
+            )
+            .returning({ id: paymentSessions.id });
+
+          if (claimed.length === 0) {
+            throw new Error("This payment has already been used for an order.");
           }
-          const stock = catalog[0].stock ?? 0;
-          if (stock <= 0) {
-            throw new Error(`${catalog[0].name} is out of stock`);
-          }
-          if (quantity > stock) {
-            throw new Error(`Only ${stock} units of ${catalog[0].name} are available`);
+        }
+
+        for (const item of pricedItems) {
+          const quantity = Number(item.quantity);
+
+          if (item.productId) {
+            const updated = await tx
+              .update(products)
+              .set({
+                stock: sql`COALESCE(${products.stock}, 0) - ${quantity}`,
+              })
+              .where(
+                and(
+                  eq(products.id, item.productId),
+                  sql`COALESCE(${products.active}, true) = true`,
+                  sql`COALESCE(${products.stock}, 0) >= ${quantity}`
+                )
+              )
+              .returning({ id: products.id });
+
+            if (updated.length === 0) {
+              throw new Error(`${item.productName} is out of stock`);
+            }
           }
 
-          const unitPrice = Number(catalog[0].price || 0);
           const row = await tx
             .insert(product)
             .values({
@@ -179,8 +270,8 @@ router.post(
               postalcode: postalCode,
               phone,
               quantity: String(quantity),
-              productName: item.productname,
-              price: String(unitPrice),
+              productName: item.productName,
+              price: String(item.unitPrice),
               size: item.size || "One Size",
               orderId,
               orderDate,
@@ -190,64 +281,25 @@ router.post(
             })
             .returning();
 
-          await tx
-            .update(products)
-            .set({ stock: stock - quantity })
-            .where(eq(products.id, item.productId));
-
           rows.push({
-            productName: item.productname,
+            productName: item.productName,
             quantity,
-            unitPrice,
+            unitPrice: item.unitPrice,
             size: row[0].size || item.size || "One Size",
           });
-        } else {
-          const unitPrice = Number(item.price ?? 0);
-          if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-            throw new Error("Invalid price for custom item");
-          }
-          await tx
-            .insert(product)
-            .values({
-              name,
-              email,
-              address,
-              city,
-              postalcode: postalCode,
-              phone,
-              quantity: String(quantity),
-              productName: item.productname,
-              price: String(unitPrice),
-              size: item.size || "One Size",
-              orderId,
-              orderDate,
-              status: "Pending",
-              paymentMethod,
-              isPaid,
-            })
-            .returning();
-
-          rows.push({
-            productName: item.productname,
-            quantity,
-            unitPrice,
-            size: item.size || "One Size",
-          });
         }
-      }
-      return rows;
-    });
+
+        return rows;
+      });
+    } catch (err) {
+      return res
+        .status(400)
+        .json({ success: false, message: (err as Error).message });
+    }
 
     const subtotal = saved.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
     const shipping = subtotal >= 150 ? 0 : 9.99;
     const tax = subtotal * 0.1;
-
-    if (paymentSessionId) {
-      await db
-        .update(paymentSessions)
-        .set({ used: true })
-        .where(eq(paymentSessions.sessionId, paymentSessionId));
-    }
 
     await sendEmail(req, {
       from: process.env.EMAIL_USER,

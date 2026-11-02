@@ -6,6 +6,7 @@ import {
   boolean,
   integer,
   numeric,
+  index,
 } from "drizzle-orm/pg-core";
 
 export const login = pgTable("login", {
@@ -14,6 +15,7 @@ export const login = pgTable("login", {
   password: text("password").notNull(),
   verified: boolean("verified").default(false),
   verificationlink: text("verificationlink"),
+  isAdmin: boolean("is_admin").notNull().default(false),
 });
 
 export const users = pgTable("users", {
@@ -23,57 +25,77 @@ export const users = pgTable("users", {
   provider: varchar("provider", { length: 50 }),
   completed: boolean("completed").default(false),
   googleRefreshToken: text("google_refresh_token"),
+  isAdmin: boolean("is_admin").notNull().default(false),
 });
 
-export const apply = pgTable("apply", {
-  id: serial("id").primaryKey(),
-  name: varchar("name", { length: 255 }),
-  email: varchar("email", { length: 255 }),
-  phoneNum: varchar("phone_num", { length: 50 }),
-  program: varchar("program", { length: 255 }),
-  college: varchar("college", { length: 255 }),
-  message: text("message"),
-  createdAt: varchar("created_at", { length: 50 }),
-});
+export const apply = pgTable(
+  "apply",
+  {
+    id: serial("id").primaryKey(),
+    name: varchar("name", { length: 255 }),
+    email: varchar("email", { length: 255 }),
+    phoneNum: varchar("phone_num", { length: 50 }),
+    program: varchar("program", { length: 255 }),
+    college: varchar("college", { length: 255 }),
+    message: text("message"),
+    createdAt: varchar("created_at", { length: 50 }),
+  },
+  (table) => [index("apply_created_at_idx").on(table.createdAt)]
+);
 
-export const product = pgTable("product", {
-  id: serial("id").primaryKey(),
-  name: varchar("name", { length: 255 }),
-  email: varchar("email", { length: 255 }),
-  address: text("address"),
-  city: varchar("city", { length: 100 }),
-  postalcode: varchar("postalcode", { length: 20 }),
-  phone: varchar("phone", { length: 50 }),
-  quantity: varchar("quantity", { length: 20 }),
-  productName: varchar("productname", { length: 255 }),
-  price: numeric("price", { precision: 10, scale: 2 }).default("0"),
-  size: varchar("size", { length: 50 }),
-  orderId: varchar("order_id", { length: 100 }),
-  orderDate: varchar("order_date", { length: 50 }),
-  status: varchar("status", { length: 50 }).default("Pending"),
-  paymentMethod: varchar("payment_method", { length: 50 }).default("Cash on Delivery"),
-  isPaid: boolean("is_paid").default(false),
-});
+export const product = pgTable(
+  "product",
+  {
+    id: serial("id").primaryKey(),
+    name: varchar("name", { length: 255 }),
+    email: varchar("email", { length: 255 }),
+    address: text("address"),
+    city: varchar("city", { length: 100 }),
+    postalcode: varchar("postalcode", { length: 20 }),
+    phone: varchar("phone", { length: 50 }),
+    quantity: varchar("quantity", { length: 20 }),
+    productName: varchar("productname", { length: 255 }),
+    price: numeric("price", { precision: 10, scale: 2 }).default("0"),
+    size: varchar("size", { length: 50 }),
+    orderId: varchar("order_id", { length: 100 }),
+    orderDate: varchar("order_date", { length: 50 }),
+    status: varchar("status", { length: 50 }).default("Pending"),
+    paymentMethod: varchar("payment_method", { length: 50 }).default("Cash on Delivery"),
+    isPaid: boolean("is_paid").default(false),
+  },
+  (table) => [
+    index("product_order_id_idx").on(table.orderId),
+    index("product_order_date_idx").on(table.orderDate),
+  ]
+);
 
-export const products = pgTable("products", {
-  id: serial("id").primaryKey(),
-  name: varchar("name", { length: 255 }).notNull(),
-  category: varchar("category", { length: 100 }).notNull(),
-  price: numeric("price", { precision: 10, scale: 2 }).notNull(),
-  image: varchar("image", { length: 500 }).notNull(),
-  rating: numeric("rating", { precision: 3, scale: 1 }).default("4.5"),
-  reviews: integer("reviews").default(0),
-  badge: varchar("badge", { length: 100 }),
-  description: text("description"),
-  sizes: text("sizes"),
-  stock: integer("stock").default(0),
-  active: boolean("active").default(true),
-});
+export const products = pgTable(
+  "products",
+  {
+    id: serial("id").primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    category: varchar("category", { length: 100 }).notNull(),
+    price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+    image: varchar("image", { length: 500 }).notNull(),
+    rating: numeric("rating", { precision: 3, scale: 1 }).default("4.5"),
+    reviews: integer("reviews").default(0),
+    badge: varchar("badge", { length: 100 }),
+    description: text("description"),
+    sizes: text("sizes"),
+    stock: integer("stock").default(0),
+    active: boolean("active").default(true),
+  },
+  (table) => [index("products_active_idx").on(table.active)]
+);
 
-export const notify = pgTable("notify", {
-  id: serial("id").primaryKey(),
-  email: varchar("email", { length: 255 }),
-});
+export const notify = pgTable(
+  "notify",
+  {
+    id: serial("id").primaryKey(),
+    email: varchar("email", { length: 255 }),
+  },
+  (table) => [index("notify_email_idx").on(table.email)]
+);
 
 export const vacancy = pgTable("vacancy", {
   id: serial("id").primaryKey(),
@@ -86,36 +108,52 @@ export const vacancy = pgTable("vacancy", {
   deadline: varchar("deadline", { length: 100 }),
 });
 
-export const vacancyApplication = pgTable("vacancy_application", {
-  id: serial("id").primaryKey(),
-  vacancyId: integer("vacancy_id").references(() => vacancy.id),
-  name: varchar("name", { length: 255 }).notNull(),
-  email: varchar("email", { length: 255 }).notNull(),
-  phone: varchar("phone", { length: 50 }),
-  resumeUrl: text("resume_url"),
-  coverLetter: text("cover_letter"),
-  createdAt: varchar("created_at", { length: 50 }),
-});
+export const vacancyApplication = pgTable(
+  "vacancy_application",
+  {
+    id: serial("id").primaryKey(),
+    vacancyId: integer("vacancy_id").references(() => vacancy.id),
+    name: varchar("name", { length: 255 }).notNull(),
+    email: varchar("email", { length: 255 }).notNull(),
+    phone: varchar("phone", { length: 50 }),
+    resumeUrl: text("resume_url"),
+    coverLetter: text("cover_letter"),
+    createdAt: varchar("created_at", { length: 50 }),
+  },
+  (table) => [
+    index("vacancy_application_vacancy_id_idx").on(table.vacancyId),
+    index("vacancy_application_created_at_idx").on(table.createdAt),
+    index("vacancy_application_vacancy_email_idx").on(table.vacancyId, table.email),
+  ]
+);
 
-export const college = pgTable("college", {
-  id: serial("id").primaryKey(),
-  name: varchar("name", { length: 255 }).notNull(),
-  location: varchar("location", { length: 255 }),
-  image: varchar("image", { length: 500 }),
-  description: text("description"),
-  features: text("features"),
-  active: boolean("active").default(true),
-});
+export const college = pgTable(
+  "college",
+  {
+    id: serial("id").primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    location: varchar("location", { length: 255 }),
+    image: varchar("image", { length: 500 }),
+    description: text("description"),
+    features: text("features"),
+    active: boolean("active").default(true),
+  },
+  (table) => [index("college_active_idx").on(table.active)]
+);
 
-export const employeeInterest = pgTable("employee_interest", {
-  id: serial("id").primaryKey(),
-  name: varchar("name", { length: 255 }).notNull(),
-  email: varchar("email", { length: 255 }).notNull(),
-  phone: varchar("phone", { length: 50 }),
-  role: varchar("role", { length: 100 }),
-  message: text("message"),
-  createdAt: varchar("created_at", { length: 50 }),
-});
+export const employeeInterest = pgTable(
+  "employee_interest",
+  {
+    id: serial("id").primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    email: varchar("email", { length: 255 }).notNull(),
+    phone: varchar("phone", { length: 50 }),
+    role: varchar("role", { length: 100 }),
+    message: text("message"),
+    createdAt: varchar("created_at", { length: 50 }),
+  },
+  (table) => [index("employee_interest_created_at_idx").on(table.createdAt)]
+);
 
 export const paymentSessions = pgTable("payment_sessions", {
   id: serial("id").primaryKey(),
@@ -145,24 +183,32 @@ export const paymentSettings = pgTable("payment_settings", {
   updatedAt: varchar("updated_at", { length: 50 }),
 });
 
-export const faq = pgTable("faq", {
-  id: serial("id").primaryKey(),
-  question: varchar("question", { length: 500 }).notNull(),
-  answer: text("answer").notNull(),
-  active: boolean("active").default(true),
-  sortOrder: integer("sort_order").default(0),
-});
+export const faq = pgTable(
+  "faq",
+  {
+    id: serial("id").primaryKey(),
+    question: varchar("question", { length: 500 }).notNull(),
+    answer: text("answer").notNull(),
+    active: boolean("active").default(true),
+    sortOrder: integer("sort_order").default(0),
+  },
+  (table) => [index("faq_active_sort_idx").on(table.active, table.sortOrder)]
+);
 
-export const guide = pgTable("guide", {
-  id: serial("id").primaryKey(),
-  title: varchar("title", { length: 255 }).notNull(),
-  subtitle: text("subtitle"),
-  // Chapters stored as JSON string: [{ heading, body, items: string[] }]
-  chapters: text("chapters"),
-  // Which section this guide belongs to: tips | questions | course | guide
-  category: varchar("category", { length: 50 }).notNull().default("guide"),
-  // Filename of the uploaded PDF guide (stored on disk under uploads/guides)
-  pdfUrl: varchar("pdf_url", { length: 500 }),
-  active: boolean("active").default(true),
-  updatedAt: varchar("updated_at", { length: 50 }),
-});
+export const guide = pgTable(
+  "guide",
+  {
+    id: serial("id").primaryKey(),
+    title: varchar("title", { length: 255 }).notNull(),
+    subtitle: text("subtitle"),
+    // Chapters stored as JSON string: [{ heading, body, items: string[] }]
+    chapters: text("chapters"),
+    // Which section this guide belongs to: tips | questions | course | guide
+    category: varchar("category", { length: 50 }).notNull().default("guide"),
+    // Filename of the uploaded PDF guide (stored on disk under uploads/guides)
+    pdfUrl: varchar("pdf_url", { length: 500 }),
+    active: boolean("active").default(true),
+    updatedAt: varchar("updated_at", { length: 50 }),
+  },
+  (table) => [index("guide_category_active_idx").on(table.category, table.active)]
+);

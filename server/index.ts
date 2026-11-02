@@ -4,11 +4,11 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import compression from "compression";
 import session from "express-session";
 import passport from "passport";
 import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
-import crypto from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
 import type { NextFunction, Request, Response } from "express";
@@ -28,7 +28,8 @@ import paymentRoutes from "./routes/payment.js";
 import collegesRoutes from "./routes/colleges.js";
 import guideRoutes from "./routes/guide.js";
 import faqRoutes from "./routes/faq.js";
-import { ensureSchema } from "./db/ensureSchema.js";
+import { runMigrations } from "./db/migrate.js";
+import { bootstrapAdmin } from "./db/bootstrapAdmin.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,6 +44,9 @@ const CORS_ORIGINS = (process.env.CORS_ALLOWED_ORIGINS || CLIENT_URL)
   .filter(Boolean);
 
 const isProd = process.env.NODE_ENV === "production";
+const COOKIE_SAME_SITE =
+  (process.env.COOKIE_SAME_SITE as "lax" | "none" | "strict" | undefined) ||
+  (isProd ? "none" : "lax");
 
 if (!SESSION_SECRET || SESSION_SECRET.length < 24) {
   console.error("[security] SESSION_SECRET is missing or too short. Set it in server/.env");
@@ -164,6 +168,9 @@ app.use(
   })
 );
 
+// ---- Response compression ----
+app.use(compression());
+
 // ---- Sessions & Passport ----
 app.use(
   session({
@@ -172,8 +179,8 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: isProd,
-      sameSite: "lax",
+      secure: isProd || COOKIE_SAME_SITE === "none",
+      sameSite: COOKIE_SAME_SITE,
       maxAge: 1000 * 60 * 60 * 24,
     },
   })
@@ -226,8 +233,8 @@ app.get(
     );
     res.cookie("auth_token", token, {
       httpOnly: true,
-      secure: isProd,
-      sameSite: "lax",
+      secure: isProd || COOKIE_SAME_SITE === "none",
+      sameSite: COOKIE_SAME_SITE,
       maxAge: 12 * 60 * 60 * 1000,
       path: "/",
     });
@@ -240,6 +247,7 @@ app.post("/auth/google/callback", authLimiter, handleGoogleCallback);
 
 // ---- Route Modules (all API endpoints live under /api) ----
 app.use("/auth", authLimiter);
+app.use("/api/admin/login", authLimiter);
 app.use("/api/admin", adminLimiter);
 app.use("/api", authRoutes);
 app.use("/api/vacancies", vacanciesRoutes);
@@ -281,15 +289,28 @@ app.use(
   }
 );
 
-ensureSchema();
+async function startServer(): Promise<void> {
+  try {
+    await runMigrations();
+    await bootstrapAdmin();
+  } catch (err) {
+    console.error(
+      "[startup] Database initialization failed:",
+      (err as Error).message
+    );
+    if (isProd) process.exit(1);
+  }
 
-const server = app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+  const server = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
 
-const shutdown = () => {
-  server.close(() => process.exit(0));
-  setTimeout(() => process.exit(1), 5000).unref();
-};
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
+  const shutdown = () => {
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(1), 5000).unref();
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+}
+
+startServer();

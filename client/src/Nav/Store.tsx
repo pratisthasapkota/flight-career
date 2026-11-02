@@ -60,7 +60,14 @@ const sortOptions: SortOption[] = [
 
 const Store: React.FC = () => {
   const navigate = useNavigate();
-  const [cart, setCart] = useState<CartItem[]>(() => JSON.parse(localStorage.getItem("aeroCart") || "[]"));
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    try {
+      const raw = sessionStorage.getItem("aeroCart");
+      return raw ? (JSON.parse(raw) as CartItem[]) : [];
+    } catch {
+      return [];
+    }
+  });
   const [activeCategory, setActiveCategory] = useState<string>("All");
   const [sortBy, setSortBy] = useState<string>("featured");
   const [showCart, setShowCart] = useState<boolean>(false);
@@ -78,7 +85,7 @@ const Store: React.FC = () => {
     let cancelled = false;
     const backendUrl: string = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
     axios
-      .get<ProductsApiResponse>(`${backendUrl}/api/products`)
+      .get<ProductsApiResponse>(`${backendUrl}/api/products?active=true`)
       .then((res) => {
         if (cancelled) return;
         const active = (res.data.data || [])
@@ -97,7 +104,7 @@ const Store: React.FC = () => {
   const allProducts: Product[] = catalogProducts || fallbackProducts;
 
   useEffect(() => {
-    localStorage.setItem("aeroCart", JSON.stringify(cart));
+    sessionStorage.setItem("aeroCart", JSON.stringify(cart));
   }, [cart]);
 
   const filteredProducts = useMemo(() => {

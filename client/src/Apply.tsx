@@ -1,5 +1,6 @@
 import React, { useState, useEffect, ChangeEvent, FormEvent } from "react";
 import axios from "axios";
+import { useFeedback } from "./Components/Feedback";
 
 interface FormData {
   name: string;
@@ -11,6 +12,7 @@ interface FormData {
 }
 
 function Apply() {
+  const feedback = useFeedback();
   const [formData, setFormData] = useState<FormData>({
     name: "",
     email: "",
@@ -27,7 +29,7 @@ function Apply() {
     const fetchColleges = async (): Promise<void> => {
       try {
         const res = await axios.get(
-          `${process.env.REACT_APP_BACKEND_URL || "http://localhost:5000"}/api/colleges`
+          `${process.env.REACT_APP_BACKEND_URL || "http://localhost:5000"}/api/colleges?active=true`
         );
         if (Array.isArray(res.data.data)) {
           setColleges(res.data.data.filter((c: { active: boolean }) => c.active !== false));
@@ -47,7 +49,7 @@ function Apply() {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      alert("Please enter a valid email address.");
+      feedback.error("Please enter a valid email address.");
       return;
     }
     try {
@@ -58,7 +60,7 @@ function Apply() {
       setSubmitted(true);
     } catch (error) {
       console.log(error);
-      alert("Something went wrong while submitting. Please try again.");
+      feedback.error("Something went wrong while submitting. Please try again.");
     }
   };
 

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import crypto from "crypto";
 import { db } from "../db/index.js";
 import { paymentSessions } from "../db/schema.js";
@@ -110,6 +110,13 @@ router.post(
         .json({ success: false, message: `${paymentMethod} payments are currently disabled.` });
     }
 
+    if (settings.mode !== "demo" && paymentMethod === "Card") {
+      return res.status(400).json({
+        success: false,
+        message: "Card payments are unavailable. Please use Khalti, eSewa, FonePay, or cash on delivery.",
+      });
+    }
+
     if (settings.mode !== "demo" && paymentMethod === "Khalti" && !settings.khaltiConfigured) {
       return res
         .status(400)
@@ -188,6 +195,10 @@ router.post(
           });
           if (result.success && result.redirectUrl) {
             redirectUrl = result.redirectUrl;
+            await db
+              .update(paymentSessions)
+              .set({ gatewayRef: transactionUuid })
+              .where(eq(paymentSessions.sessionId, sessionId));
           } else {
             return res.status(400).json({
               success: false,
@@ -205,6 +216,10 @@ router.post(
           });
           if (result.success && result.redirectUrl) {
             redirectUrl = result.redirectUrl;
+            await db
+              .update(paymentSessions)
+              .set({ gatewayRef: transactionId })
+              .where(eq(paymentSessions.sessionId, sessionId));
           } else {
             return res.status(400).json({
               success: false,
@@ -293,36 +308,36 @@ router.post(
 
     let gatewayTxnId: string | undefined;
 
-    const effectivePidx = pidx || session.gatewayRef || "";
+    const storedRef = session.gatewayRef || "";
 
     try {
-      if (method === "Card") {
-        if (!cardNumber || !cardName || !cardExpiry || !cardCvv) {
-          return res.status(400).json({ success: false, message: "Please fill in all card details." });
-        }
+      if (settings.mode === "demo") {
+        if (method === "Card") {
+          if (!cardNumber || !cardName || !cardExpiry || !cardCvv) {
+            return res.status(400).json({ success: false, message: "Please fill in all card details." });
+          }
 
-        const digits = cardNumber.replace(/\D/g, "");
-        if (digits.length < 13 || digits.length > 19) {
-          return res.status(400).json({ success: false, message: "Invalid card number." });
-        }
+          const digits = cardNumber.replace(/\D/g, "");
+          if (digits.length < 13 || digits.length > 19) {
+            return res.status(400).json({ success: false, message: "Invalid card number." });
+          }
 
-        const cvvDigits = cardCvv.replace(/\D/g, "");
-        if (cvvDigits.length < 3 || cvvDigits.length > 4) {
-          return res.status(400).json({ success: false, message: "Invalid CVV." });
-        }
+          const cvvDigits = cardCvv.replace(/\D/g, "");
+          if (cvvDigits.length < 3 || cvvDigits.length > 4) {
+            return res.status(400).json({ success: false, message: "Invalid CVV." });
+          }
 
-        const expiryMatch = /^(0[1-9]|1[0-2])\/\d{2}$/.test(cardExpiry.trim());
-        if (!expiryMatch) {
-          return res.status(400).json({ success: false, message: "Invalid expiry date. Use MM/YY." });
-        }
+          const expiryMatch = /^(0[1-9]|1[0-2])\/\d{2}$/.test(cardExpiry.trim());
+          if (!expiryMatch) {
+            return res.status(400).json({ success: false, message: "Invalid expiry date. Use MM/YY." });
+          }
 
-        if (!paymentToken || !/^\d{6}$/.test(paymentToken)) {
-          return res.status(400).json({ success: false, message: "OTP must be a 6-digit code." });
-        }
+          if (!paymentToken || !/^\d{6}$/.test(paymentToken)) {
+            return res.status(400).json({ success: false, message: "OTP must be a 6-digit code." });
+          }
 
-        gatewayTxnId = "CARD-" + crypto.randomBytes(6).toString("hex").toUpperCase();
-      } else if (method === "Khalti") {
-        if (settings.mode === "demo") {
+          gatewayTxnId = "CARD-" + crypto.randomBytes(6).toString("hex").toUpperCase();
+        } else {
           if (!isValidPhone(walletPhone)) {
             return res.status(400).json({ success: false, message: "Please enter a valid wallet phone number." });
           }
@@ -330,45 +345,57 @@ router.post(
             return res.status(400).json({ success: false, message: "OTP must be a 6-digit code." });
           }
           gatewayTxnId = "TXN-" + crypto.randomBytes(6).toString("hex").toUpperCase();
-        } else {
-          if (!effectivePidx) {
-            return res.status(400).json({ success: false, message: "Khalti payment reference is missing." });
-          }
-          const result = await verifyKhaltiPayment(settings, effectivePidx);
-          if (!result.success) {
-            return res.status(400).json({ success: false, message: result.message });
-          }
-          gatewayTxnId = result.gatewayTxnId;
         }
-      } else if (method === "eSewa") {
-        if (!transactionUuid || !gatewayRef) {
-          return res.status(400).json({ success: false, message: "eSewa payment reference is missing." });
+      } else if (method === "Card") {
+        return res.status(400).json({
+          success: false,
+          message: "Card payments are unavailable. Please use Khalti, eSewa, FonePay, or cash on delivery.",
+        });
+      } else if (method === "Khalti") {
+        if (!storedRef) {
+          return res.status(400).json({ success: false, message: "Khalti payment reference is missing." });
         }
-        const result = await verifyEsewaPayment(settings, transactionUuid, Number(session.amount));
+        const result = await verifyKhaltiPayment(settings, storedRef);
         if (!result.success) {
           return res.status(400).json({ success: false, message: result.message });
+        }
+        if (result.reference && result.reference !== storedRef) {
+          return res.status(400).json({ success: false, message: "Khalti payment reference mismatch." });
+        }
+        if (
+          result.amount !== undefined &&
+          result.amount !== Math.round(Number(session.amount) * 100)
+        ) {
+          return res.status(400).json({ success: false, message: "Khalti payment amount mismatch." });
+        }
+        gatewayTxnId = result.gatewayTxnId;
+      } else if (method === "eSewa") {
+        if (!storedRef) {
+          return res.status(400).json({ success: false, message: "eSewa payment reference is missing." });
+        }
+        const result = await verifyEsewaPayment(settings, storedRef, Number(session.amount));
+        if (!result.success) {
+          return res.status(400).json({ success: false, message: result.message });
+        }
+        if (
+          result.amount !== undefined &&
+          Math.abs(result.amount - Number(session.amount)) > 0.01
+        ) {
+          return res.status(400).json({ success: false, message: "eSewa payment amount mismatch." });
         }
         gatewayTxnId = result.gatewayTxnId || gatewayRef;
       } else if (method === "FonePay") {
-        if (!gatewayRef) {
+        const reference = storedRef || sessionId;
+        if (!reference) {
           return res.status(400).json({ success: false, message: "FonePay payment reference is missing." });
         }
-        const result = await verifyFonePayPayment(settings, gatewayRef, Number(session.amount));
+        const result = await verifyFonePayPayment(settings, reference, Number(session.amount));
         if (!result.success) {
           return res.status(400).json({ success: false, message: result.message });
         }
-        gatewayTxnId = result.gatewayTxnId || gatewayRef;
+        gatewayTxnId = result.gatewayTxnId || reference;
       } else {
-        if (settings.mode !== "demo") {
-          return res.status(400).json({ success: false, message: `Unsupported payment method: ${method}` });
-        }
-        if (!isValidPhone(walletPhone)) {
-          return res.status(400).json({ success: false, message: "Please enter a valid wallet phone number." });
-        }
-        if (!paymentToken || !/^\d{6}$/.test(paymentToken)) {
-          return res.status(400).json({ success: false, message: "OTP must be a 6-digit code." });
-        }
-        gatewayTxnId = "TXN-" + crypto.randomBytes(6).toString("hex").toUpperCase();
+        return res.status(400).json({ success: false, message: `Unsupported payment method: ${method}` });
       }
     } catch (err) {
       return res.status(500).json({
@@ -382,10 +409,27 @@ router.post(
       Date.now().toString(36).toUpperCase() +
       crypto.randomBytes(3).toString("hex").toUpperCase();
 
-    await db
+    const completed = await db
       .update(paymentSessions)
-      .set({ status: "completed", completedAt: new Date().toISOString() })
-      .where(eq(paymentSessions.sessionId, sessionId));
+      .set({
+        status: "completed",
+        completedAt: new Date().toISOString(),
+        gatewayTxnId: gatewayTxnId || null,
+      })
+      .where(
+        and(
+          eq(paymentSessions.sessionId, sessionId),
+          eq(paymentSessions.status, "pending")
+        )
+      )
+      .returning({ id: paymentSessions.id });
+
+    if (completed.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "This payment has already been processed.",
+      });
+    }
 
     if (session.customerEmail) {
       await sendEmail(req, {

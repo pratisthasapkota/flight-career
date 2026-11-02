@@ -278,7 +278,7 @@ const PaymentPage: React.FC = () => {
       .post(`${backendUrl}/api/product`, payload)
       .then((res) => {
         if (res.data?.success) {
-          localStorage.removeItem("aeroCart");
+          sessionStorage.removeItem("aeroCart");
           sessionStorage.removeItem("pendingOrderPayload");
           navigate("/price", {
             state: {

@@ -40,6 +40,7 @@ import FAQ from './Pages/Careers/FAQ';
 import AdminLogin from './Pages/Admin/AdminLogin';
 import AdminDashboard from './Pages/Admin/AdminDashboard';
 import RequireAuth from './Components/RequireAuth';
+import RequireAdmin from './Components/RequireAdmin';
 
 function App() {
   return (
@@ -81,7 +82,14 @@ function App() {
         </Route>
 
         <Route path="/admin/login" element={<AdminLogin />} />
-        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route
+          path="/admin/dashboard"
+          element={
+            <RequireAdmin>
+              <AdminDashboard />
+            </RequireAdmin>
+          }
+        />
       </Routes>
    
   );

@@ -29,7 +29,7 @@ const Colleges: React.FC = () => {
     const fetchColleges = async (): Promise<void> => {
       try {
         const res = await axios.get(
-          `${process.env.REACT_APP_BACKEND_URL || "http://localhost:5000"}/api/colleges`
+          `${process.env.REACT_APP_BACKEND_URL || "http://localhost:5000"}/api/colleges?active=true`
         );
         if (Array.isArray(res.data.data)) {
           setColleges(res.data.data.filter((c: CollegeData) => c.active !== false));

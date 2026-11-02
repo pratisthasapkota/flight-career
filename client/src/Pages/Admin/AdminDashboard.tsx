@@ -16,6 +16,8 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
+import { useFeedback } from "../../Components/Feedback";
+import { getAdminCsrfToken } from "../../adminAuth";
 
 interface Vacancy {
   id: number | string;
@@ -513,6 +515,7 @@ const AdmFilterBar: React.FC<AdmFilterBarProps> = ({
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
+  const feedback = useFeedback();
   const [data, setData] = useState<AdminData | null>(null);
   const [catalog, setCatalog] = useState<Product[]>([]);
   const [activeTab, setActiveTab] = useState<string>("overview");
@@ -587,10 +590,7 @@ const AdminDashboard = () => {
 
   const backendUrl: string = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
 
-  const getCsrfToken = (): string => {
-    const match = document.cookie.match(/(?:^|;\s*)admin_csrf=([^;]+)/);
-    return match ? decodeURIComponent(match[1]) : "";
-  };
+  const getCsrfToken = (): string => getAdminCsrfToken();
 
   const withCreds = {
     withCredentials: true,
@@ -598,69 +598,19 @@ const AdminDashboard = () => {
   };
 
 useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
-        const res = await axios.get<{ success: boolean; data?: AdminData }>(`${backendUrl}/api/admin/applications`, {
-          withCredentials: true,
-        });
-        if (!res.data.success) {
-          navigate("/admin/login");
-          return;
-        }
-        setData(res.data.data ?? null);
-        const [catRes, colRes, guideRes, faqRes] = await Promise.all([
-          axios.get<{ data: Product[] }>(`${backendUrl}/api/products`).catch(() => null),
-          axios.get<{ data: College[] }>(`${backendUrl}/api/colleges`).catch(() => null),
-          axios.get<{ data: Guide[] }>(`${backendUrl}/api/guide`).catch(() => null),
-          axios.get<{ success: boolean; data: Faq[] }>(`${backendUrl}/api/faq/all`, withCreds).catch(() => null),
-        ]);
-        if (catRes && Array.isArray(catRes.data.data)) {
-          setCatalog(catRes.data.data);
-        }
-        if (colRes && Array.isArray(colRes.data.data)) {
-          setColleges(colRes.data.data);
-        }
-        if (guideRes && Array.isArray(guideRes.data.data)) {
-          setGuides(guideRes.data.data);
-        }
-        if (faqRes && Array.isArray(faqRes.data.data)) {
-          setFaqs(faqRes.data.data);
-        }
-        try {
-          const payRes = await axios.get<{ success: boolean; data: PaymentSettings }>(`${backendUrl}/api/admin/payment-settings`, withCreds);
-          if (payRes.data?.success && payRes.data?.data) {
-            const s = payRes.data.data;
-            setPaymentSettings(s);
-            setPayMode(s.mode === "khalti" ? "live" : (s.mode || "demo") as "demo" | "live");
-            setPayMethods(s.enabledMethods?.length ? s.enabledMethods : ["Cash on Delivery", "Khalti", "eSewa", "FonePay", "Card"]);
-            setKhaltiPublicKey(s.khaltiPublicKey || "");
-            setKhaltiSecretKey(s.khaltiSecretKey || "");
-            setEsewaMerchantId(s.esewaMerchantId || "");
-            setEsewaSecretKey(s.esewaSecretKey || "");
-            setFonepayMerchantId(s.fonepayMerchantId || "");
-            setFonepaySecretKey(s.fonepaySecretKey || "");
-          }
-        } catch { /* non-fatal */ }
-      } catch {
-        navigate("/admin/login");
-        return;
-      } finally {
-        setLoading(false);
-      }
-    };
-    checkAuth();
+    fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigate]);
+  }, []);
 
   const fetchData = async (): Promise<void> => {
     try {
-      const [appsRes, catRes, colRes, guideRes, faqRes] = await Promise.all([
+      const [appsRes, catRes, colRes, guideRes, faqRes, payRes] = await Promise.all([
         axios.get<{ success: boolean; data: AdminData }>(`${backendUrl}/api/admin/applications`, withCreds),
-        axios.get<{ data: Product[] }>(`${backendUrl}/api/products`).catch(() => null),
+        axios.get<{ data: Product[] }>(`${backendUrl}/api/products?active=true`).catch(() => null),
         axios.get<{ data: College[] }>(`${backendUrl}/api/colleges`).catch(() => null),
         axios.get<{ data: Guide[] }>(`${backendUrl}/api/guide`).catch(() => null),
         axios.get<{ success: boolean; data: Faq[] }>(`${backendUrl}/api/faq/all`, withCreds).catch(() => null),
+        axios.get<{ success: boolean; data: PaymentSettings }>(`${backendUrl}/api/admin/payment-settings`, withCreds).catch(() => null),
       ]);
       if (!appsRes.data.success) {
         navigate("/admin/login");
@@ -679,13 +629,28 @@ useEffect(() => {
       if (faqRes && Array.isArray(faqRes.data.data)) {
         setFaqs(faqRes.data.data);
       }
+      if (payRes?.data?.success && payRes.data?.data) {
+        const s = payRes.data.data;
+        setPaymentSettings(s);
+        setPayMode(s.mode === "khalti" ? "live" : ((s.mode || "demo") as "demo" | "live"));
+        setPayMethods(s.enabledMethods?.length ? s.enabledMethods : ["Cash on Delivery", "Khalti", "eSewa", "FonePay", "Card"]);
+        setKhaltiPublicKey(s.khaltiPublicKey || "");
+        setKhaltiSecretKey(s.khaltiSecretKey || "");
+        setEsewaMerchantId(s.esewaMerchantId || "");
+        setEsewaSecretKey(s.esewaSecretKey || "");
+        setFonepayMerchantId(s.fonepayMerchantId || "");
+        setFonepaySecretKey(s.fonepaySecretKey || "");
+      }
     } catch (err: any) {
-      if (err.response?.status === 401) {
-        await axios.post(`${backendUrl}/api/admin/logout`, {}, withCreds);
+      if (err.response?.status === 401 || err.response?.status === 403) {
         navigate("/admin/login");
         return;
       }
       console.error("Failed to fetch admin data", err);
+      feedback.error(
+        err.response?.data?.message ||
+          "Could not load dashboard data. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -742,65 +707,106 @@ useEffect(() => {
       }
       await fetchData();
       closeVacancyForm();
-    } catch (err) {
+      feedback.success(editingVacancy ? "Vacancy updated" : "Vacancy created");
+    } catch (err: any) {
       console.error("Failed to save vacancy", err);
-      alert("Failed to save vacancy");
+      feedback.error(err.response?.data?.message || "Failed to save vacancy");
     } finally {
       setSavingVacancy(false);
     }
   };
 
-  const handleDeleteVacancy = async (id: number | string): Promise<void> => {
-    if (!window.confirm("Are you sure you want to delete this vacancy?")) return;
+  const handleDeleteVacancy = async (
+    id: number | string,
+    title: string
+  ): Promise<void> => {
+    const confirmed = await feedback.confirm({
+      title: "Delete vacancy?",
+      message: `Are you sure you want to delete "${title}"? This cannot be undone.`,
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!confirmed) return;
     try {
       await axios.delete(`${backendUrl}/api/vacancies/${id}`, withCreds);
       await fetchData();
-    } catch (err) {
+      feedback.success("Vacancy deleted");
+    } catch (err: any) {
       console.error("Failed to delete vacancy", err);
-      alert("Failed to delete vacancy");
+      feedback.error(err.response?.data?.message || "Failed to delete vacancy");
     }
   };
 
   const handleResendVerification = async (id: number | string): Promise<void> => {
     try {
       await axios.post(`${backendUrl}/api/admin/users/${id}/resend-verification`, {}, withCreds);
-      alert("Verification email sent successfully");
+      feedback.success("Verification email sent successfully");
     } catch (err: any) {
       console.error("Failed to resend verification", err);
-      alert(err.response?.data?.message || "Failed to resend verification email");
+      feedback.error(err.response?.data?.message || "Failed to resend verification email");
     }
   };
 
-  const handleDeleteUser = async (id: number | string): Promise<void> => {
-    if (!window.confirm(`Delete this user (ID ${id})? This will permanently remove the account and cannot be undone.`)) return;
+  const handleDeleteUser = async (
+    id: number | string,
+    email: string
+  ): Promise<void> => {
+    const confirmed = await feedback.confirm({
+      title: "Delete user?",
+      message: `Are you sure you want to delete "${email}"? This will permanently remove the account and cannot be undone.`,
+      confirmText: "Delete user",
+      danger: true,
+    });
+    if (!confirmed) return;
     try {
       await axios.delete(`${backendUrl}/api/admin/users/${id}`, withCreds);
       await fetchData();
+      feedback.success("User deleted");
     } catch (err: any) {
       console.error("Failed to delete user", err);
-      alert(err.response?.data?.message || "Failed to delete user");
+      feedback.error(err.response?.data?.message || "Failed to delete user");
     }
   };
 
-  const handleDeleteSubscriber = async (id: number | string): Promise<void> => {
-    if (!window.confirm(`Delete this subscriber (ID ${id})? This will permanently remove them from the notify list.`)) return;
+  const handleDeleteSubscriber = async (
+    id: number | string,
+    email: string
+  ): Promise<void> => {
+    const confirmed = await feedback.confirm({
+      title: "Delete subscriber?",
+      message: `Are you sure you want to remove "${email}" from the notify list?`,
+      confirmText: "Delete subscriber",
+      danger: true,
+    });
+    if (!confirmed) return;
     try {
       await axios.delete(`${backendUrl}/api/admin/subscribers/${id}`, withCreds);
       await fetchData();
+      feedback.success("Subscriber deleted");
     } catch (err: any) {
       console.error("Failed to delete subscriber", err);
-      alert(err.response?.data?.message || "Failed to delete subscriber");
+      feedback.error(err.response?.data?.message || "Failed to delete subscriber");
     }
   };
 
-  const handleDeleteVacancyApp = async (id: number | string): Promise<void> => {
-    if (!window.confirm(`Delete this application (ID ${id})? This cannot be undone.`)) return;
+  const handleDeleteVacancyApp = async (
+    id: number | string,
+    applicant: string
+  ): Promise<void> => {
+    const confirmed = await feedback.confirm({
+      title: "Delete application?",
+      message: `Are you sure you want to delete the application from "${applicant}"? This cannot be undone.`,
+      confirmText: "Delete application",
+      danger: true,
+    });
+    if (!confirmed) return;
     try {
       await axios.delete(`${backendUrl}/api/admin/vacancy-applications/${id}`, withCreds);
       await fetchData();
+      feedback.success("Application deleted");
     } catch (err: any) {
       console.error("Failed to delete application", err);
-      alert(err.response?.data?.message || "Failed to delete application");
+      feedback.error(err.response?.data?.message || "Failed to delete application");
     }
   };
 
@@ -812,7 +818,7 @@ useEffect(() => {
       window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
     } catch (err: any) {
       console.error("Failed to load resume", err);
-      alert(err.response?.data?.message || "Failed to load resume. Please check your session.");
+      feedback.error(err.response?.data?.message || "Failed to load resume. Please check your session.");
     }
   };
 
@@ -879,22 +885,33 @@ useEffect(() => {
       }
       await fetchData();
       closeProductForm();
+      feedback.success(editingProduct ? "Product updated" : "Product created");
     } catch (err: any) {
       console.error("Failed to save product", err);
-      alert(err.response?.data?.message || "Failed to save product");
+      feedback.error(err.response?.data?.message || "Failed to save product");
     } finally {
       setSavingProduct(false);
     }
   };
 
-  const handleDeleteProduct = async (id: number | string): Promise<void> => {
-    if (!window.confirm("Are you sure you want to delete this product?")) return;
+  const handleDeleteProduct = async (
+    id: number | string,
+    name: string
+  ): Promise<void> => {
+    const confirmed = await feedback.confirm({
+      title: "Delete product?",
+      message: `Are you sure you want to delete "${name}"? This will permanently remove it from the store.`,
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!confirmed) return;
     try {
       await axios.delete(`${backendUrl}/api/products/${id}`, withCreds);
       await fetchData();
-    } catch (err) {
+      feedback.success("Product deleted");
+    } catch (err: any) {
       console.error("Failed to delete product", err);
-      alert("Failed to delete product");
+      feedback.error(err.response?.data?.message || "Failed to delete product");
     }
   };
 
@@ -902,9 +919,9 @@ useEffect(() => {
     try {
       await axios.put(`${backendUrl}/api/products/${p.id}`, productToPayload({ ...p, active: !p.active } as ProductForm), withCreds);
       await fetchData();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to toggle product", err);
-      alert("Failed to update product");
+      feedback.error(err.response?.data?.message || "Failed to update product");
     }
   };
 
@@ -961,22 +978,33 @@ useEffect(() => {
       }
       await fetchData();
       closeCollegeForm();
+      feedback.success(editingCollege ? "College updated" : "College created");
     } catch (err: any) {
       console.error("Failed to save college", err);
-      alert(err.response?.data?.message || "Failed to save college");
+      feedback.error(err.response?.data?.message || "Failed to save college");
     } finally {
       setSavingCollege(false);
     }
   };
 
-  const handleDeleteCollege = async (id: number | string): Promise<void> => {
-    if (!window.confirm("Are you sure you want to delete this college?")) return;
+  const handleDeleteCollege = async (
+    id: number | string,
+    name: string
+  ): Promise<void> => {
+    const confirmed = await feedback.confirm({
+      title: "Delete college?",
+      message: `Are you sure you want to delete "${name}"? This will permanently remove it from the colleges list.`,
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!confirmed) return;
     try {
       await axios.delete(`${backendUrl}/api/colleges/${id}`, withCreds);
       await fetchData();
-    } catch (err) {
+      feedback.success("College deleted");
+    } catch (err: any) {
       console.error("Failed to delete college", err);
-      alert("Failed to delete college");
+      feedback.error(err.response?.data?.message || "Failed to delete college");
     }
   };
 
@@ -984,9 +1012,9 @@ useEffect(() => {
     try {
       await axios.put(`${backendUrl}/api/colleges/${c.id}`, collegeToPayload({ ...c, active: !c.active } as unknown as CollegeForm), withCreds);
       await fetchData();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to toggle college", err);
-      alert("Failed to update college");
+      feedback.error(err.response?.data?.message || "Failed to update college");
     }
   };
 
@@ -1039,22 +1067,33 @@ useEffect(() => {
       }
       await fetchData();
       closeFaqForm();
+      feedback.success(editingFaq ? "FAQ updated" : "FAQ created");
     } catch (err: any) {
       console.error("Failed to save FAQ", err);
-      alert(err.response?.data?.message || "Failed to save FAQ");
+      feedback.error(err.response?.data?.message || "Failed to save FAQ");
     } finally {
       setSavingFaq(false);
     }
   };
 
-  const handleDeleteFaq = async (id: number | string): Promise<void> => {
-    if (!window.confirm("Are you sure you want to delete this FAQ?")) return;
+  const handleDeleteFaq = async (
+    id: number | string,
+    question: string
+  ): Promise<void> => {
+    const confirmed = await feedback.confirm({
+      title: "Delete FAQ?",
+      message: `Are you sure you want to delete "${question}"? This will permanently remove it from the site.`,
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!confirmed) return;
     try {
       await axios.delete(`${backendUrl}/api/faq/${id}`, withCreds);
       await fetchData();
-    } catch (err) {
+      feedback.success("FAQ deleted");
+    } catch (err: any) {
       console.error("Failed to delete FAQ", err);
-      alert("Failed to delete FAQ");
+      feedback.error(err.response?.data?.message || "Failed to delete FAQ");
     }
   };
 
@@ -1062,19 +1101,26 @@ useEffect(() => {
     try {
       await axios.put(`${backendUrl}/api/faq/${f.id}`, { ...f, active: !f.active }, withCreds);
       await fetchData();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to toggle FAQ", err);
-      alert("Failed to update FAQ");
+      feedback.error(err.response?.data?.message || "Failed to update FAQ");
     }
   };
 
   const seedFaq = async (): Promise<void> => {
+    const confirmed = await feedback.confirm({
+      title: "Seed default FAQs?",
+      message: "This adds the default FAQ entries if they are missing.",
+      confirmText: "Seed FAQs",
+    });
+    if (!confirmed) return;
     try {
       await axios.post(`${backendUrl}/api/faq/seed`, {}, withCreds);
       await fetchData();
+      feedback.success("FAQs seeded successfully");
     } catch (err: any) {
       console.error("Failed to seed FAQs", err);
-      alert(err.response?.data?.message || "Failed to seed FAQs");
+      feedback.error(err.response?.data?.message || "Failed to seed FAQs");
     }
   };
 
@@ -1097,27 +1143,37 @@ useEffect(() => {
   };
 
   const seedDefaultGuide = async (): Promise<void> => {
-    if (!window.confirm("Seed default content for all 4 interview sections?")) return;
+    const confirmed = await feedback.confirm({
+      title: "Seed all guide sections?",
+      message: "Seed default content for all 4 interview sections?",
+      confirmText: "Seed all",
+    });
+    if (!confirmed) return;
     try {
       const res = await axios.post(`${backendUrl}/api/guide/seed`, {}, withCreds);
       await fetchData();
-      alert(res.data?.message || "Content seeded successfully!");
+      feedback.success(res.data?.message || "Content seeded successfully!");
     } catch (err: any) {
       console.error("Failed to seed guide", err);
-      alert(err.response?.data?.message || "Failed to seed guide");
+      feedback.error(err.response?.data?.message || "Failed to seed guide");
     }
   };
 
   const seedGuideCategory = async (category: string): Promise<void> => {
     const label = guideCategoryLabels[category] || category;
-    if (!window.confirm(`Seed default content for "${label}"?`)) return;
+    const confirmed = await feedback.confirm({
+      title: "Seed guide section?",
+      message: `Seed default content for "${label}"?`,
+      confirmText: "Seed section",
+    });
+    if (!confirmed) return;
     try {
       const res = await axios.post(`${backendUrl}/api/guide/seed/${category}`, {}, withCreds);
       await fetchData();
-      alert(res.data?.message || `"${label}" seeded successfully!`);
+      feedback.success(res.data?.message || `"${label}" seeded successfully!`);
     } catch (err: any) {
       console.error("Failed to seed guide", err);
-      alert(err.response?.data?.message || "Failed to seed guide");
+      feedback.error(err.response?.data?.message || "Failed to seed guide");
     }
   };
 
@@ -1163,7 +1219,7 @@ useEffect(() => {
         try {
           chapters = JSON.stringify(JSON.parse(chapters));
         } catch {
-          alert("Chapters must be valid JSON. Format: [{ heading, body, items: [...] }]");
+          feedback.error("Chapters must be valid JSON. Format: [{ heading, body, items: [...] }]");
           return;
         }
       }
@@ -1182,22 +1238,33 @@ useEffect(() => {
       }
       await fetchData();
       closeGuideForm();
+      feedback.success(editingGuide ? "Guide updated" : "Guide created");
     } catch (err: any) {
       console.error("Failed to save guide", err);
-      alert(err.response?.data?.message || "Failed to save guide");
+      feedback.error(err.response?.data?.message || "Failed to save guide");
     } finally {
       setSavingGuide(false);
     }
   };
 
-  const handleDeleteGuide = async (id: number | string): Promise<void> => {
-    if (!window.confirm("Are you sure you want to delete this guide? Its PDF file will also be removed.")) return;
+  const handleDeleteGuide = async (
+    id: number | string,
+    title: string
+  ): Promise<void> => {
+    const confirmed = await feedback.confirm({
+      title: "Delete guide?",
+      message: `Are you sure you want to delete "${title}"? Its PDF file will also be removed.`,
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!confirmed) return;
     try {
       await axios.delete(`${backendUrl}/api/guide/${id}`, withCreds);
       await fetchData();
-    } catch (err) {
+      feedback.success("Guide deleted");
+    } catch (err: any) {
       console.error("Failed to delete guide", err);
-      alert("Failed to delete guide");
+      feedback.error(err.response?.data?.message || "Failed to delete guide");
     }
   };
 
@@ -1211,9 +1278,9 @@ useEffect(() => {
       if (Array.isArray(g.chapters)) form.append("chapters", chaptersToJson(g.chapters));
       await axios.put(`${backendUrl}/api/guide/${g.id}`, form, withCreds);
       await fetchData();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to toggle guide", err);
-      alert("Failed to update guide");
+      feedback.error(err.response?.data?.message || "Failed to update guide");
     }
   };
 
@@ -1225,9 +1292,10 @@ useEffect(() => {
         withCreds
       );
       await fetchData();
-    } catch (err) {
+      feedback.success("Order status updated");
+    } catch (err: any) {
       console.error("Failed to update order status", err);
-      alert("Failed to update order status");
+      feedback.error(err.response?.data?.message || "Failed to update order status");
     }
   };
 
@@ -1239,20 +1307,28 @@ useEffect(() => {
         withCreds
       );
       await fetchData();
-    } catch (err) {
+      feedback.success(isPaid ? "Order marked as paid" : "Order marked as unpaid");
+    } catch (err: any) {
       console.error("Failed to update payment status", err);
-      alert("Failed to update payment status");
+      feedback.error(err.response?.data?.message || "Failed to update payment status");
     }
   };
 
-  const deleteOrder = async (key: string): Promise<void> => {
-    if (!window.confirm("Delete this entire order?")) return;
+  const deleteOrder = async (key: string, customer: string): Promise<void> => {
+    const confirmed = await feedback.confirm({
+      title: "Delete order?",
+      message: `Are you sure you want to delete order "${key}" for "${customer}"? This cannot be undone.`,
+      confirmText: "Delete order",
+      danger: true,
+    });
+    if (!confirmed) return;
     try {
       await axios.delete(`${backendUrl}/api/admin/orders/${encodeURIComponent(key)}`, withCreds);
       await fetchData();
-    } catch (err) {
+      feedback.success("Order deleted");
+    } catch (err: any) {
       console.error("Failed to delete order", err);
-      alert("Failed to delete order");
+      feedback.error(err.response?.data?.message || "Failed to delete order");
     }
   };
 
@@ -2617,7 +2693,7 @@ useEffect(() => {
                                 <td>
                                   <div className="adm-action-btns">
                                     <button className="adm-btn-sm adm-btn-edit" onClick={() => openEditForm(v)}>Edit</button>
-                                    <button className="adm-btn-sm adm-btn-delete" onClick={() => handleDeleteVacancy(v.id)}>Delete</button>
+                                    <button className="adm-btn-sm adm-btn-delete" onClick={() => handleDeleteVacancy(v.id, v.title)}>Delete</button>
                                   </div>
                                 </td>
                               </tr>
@@ -2689,23 +2765,27 @@ useEffect(() => {
                                   </td>
                                   <td>
                                     {app.resumeUrl ? (
-                                      <a
-                                        href="#"
-                                        onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
-                                          e.preventDefault();
-                                          void viewResume(app.resumeUrl || "");
+                                      <button
+                                        type="button"
+                                        onClick={() => void viewResume(app.resumeUrl || "")}
+                                        style={{
+                                          background: "none",
+                                          border: "none",
+                                          padding: 0,
+                                          color: "#00509e",
+                                          fontWeight: 600,
+                                          cursor: "pointer",
                                         }}
-                                        style={{ color: "#00509e", fontWeight: 600 }}
                                       >
                                         View CV
-                                      </a>
+                                      </button>
                                     ) : (
                                       "N/A"
                                     )}
                                   </td>
                                   <td>{formatDateTime(app.createdAt)}</td>
                                   <td>
-                                    <button className="adm-btn-sm adm-btn-delete" onClick={() => handleDeleteVacancyApp(app.id)}>Delete</button>
+                                    <button className="adm-btn-sm adm-btn-delete" onClick={() => handleDeleteVacancyApp(app.id, `${app.name} (${app.email})`)}>Delete</button>
                                   </td>
                                 </tr>
                               );
@@ -2878,7 +2958,7 @@ useEffect(() => {
                                     <option key={s} value={s}>{s}</option>
                                   ))}
                                 </select>
-                                <button className="adm-btn-sm adm-btn-delete" onClick={() => deleteOrder(group.key)}>Delete</button>
+                                <button className="adm-btn-sm adm-btn-delete" onClick={() => deleteOrder(group.key, group.name)}>Delete</button>
                               </div>
                             </div>
                             <div className="adm-order-meta">
@@ -2995,7 +3075,7 @@ useEffect(() => {
                                 <td>
                                   <div className="adm-action-btns">
                                     <button className="adm-btn-sm adm-btn-edit" onClick={() => openEditProduct(p)}>Edit</button>
-                                    <button className="adm-btn-sm adm-btn-delete" onClick={() => handleDeleteProduct(p.id)}>Delete</button>
+                                    <button className="adm-btn-sm adm-btn-delete" onClick={() => handleDeleteProduct(p.id, p.name)}>Delete</button>
                                   </div>
                                 </td>
                               </tr>
@@ -3060,7 +3140,7 @@ useEffect(() => {
                                 <td>
                                   <div className="adm-action-btns">
                                     <button className="adm-btn-sm adm-btn-edit" onClick={() => openEditCollege(c)}>Edit</button>
-                                    <button className="adm-btn-sm adm-btn-delete" onClick={() => handleDeleteCollege(c.id)}>Delete</button>
+                                    <button className="adm-btn-sm adm-btn-delete" onClick={() => handleDeleteCollege(c.id, c.name)}>Delete</button>
                                   </div>
                                 </td>
                               </tr>
@@ -3156,7 +3236,7 @@ useEffect(() => {
                                 <td>
                                   <div className="adm-action-btns">
                                     <button className="adm-btn-sm adm-btn-edit" onClick={() => openEditGuide(g)}>Edit</button>
-                                    <button className="adm-btn-sm adm-btn-delete" onClick={() => handleDeleteGuide(g.id)}>Delete</button>
+                                    <button className="adm-btn-sm adm-btn-delete" onClick={() => handleDeleteGuide(g.id, g.title)}>Delete</button>
                                   </div>
                                 </td>
                               </tr>
@@ -3225,7 +3305,7 @@ useEffect(() => {
                                 <td>
                                   <div className="adm-action-btns">
                                     <button className="adm-btn-sm adm-btn-edit" onClick={() => openEditFaq(f)}>Edit</button>
-                                    <button className="adm-btn-sm adm-btn-delete" onClick={() => handleDeleteFaq(f.id)}>Delete</button>
+                                    <button className="adm-btn-sm adm-btn-delete" onClick={() => handleDeleteFaq(f.id, f.question)}>Delete</button>
                                   </div>
                                 </td>
                               </tr>
@@ -3294,7 +3374,7 @@ useEffect(() => {
                                   <button
                                     className="adm-btn-sm adm-btn-delete"
                                     style={{ marginLeft: !u.verified ? 6 : 0 }}
-                                    onClick={() => handleDeleteUser(u.id)}
+                                    onClick={() => handleDeleteUser(u.id, u.email)}
                                   >
                                     Delete
                                   </button>
@@ -3344,7 +3424,7 @@ useEffect(() => {
                                   <div className="adm-action-btns">
                                     <button
                                       className="adm-btn-sm adm-btn-delete"
-                                      onClick={() => handleDeleteSubscriber(s.id)}
+                                      onClick={() => handleDeleteSubscriber(s.id, s.email)}
                                     >
                                       Delete
                                     </button>

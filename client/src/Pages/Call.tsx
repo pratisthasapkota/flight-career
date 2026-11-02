@@ -9,8 +9,8 @@ const Call: React.FC = () => {
   useEffect(() => {
     if (loading) return;
     if (user) {
-      const from = localStorage.getItem('redirectFrom') || '/';
-      localStorage.removeItem('redirectFrom');
+  const from = sessionStorage.getItem('redirectFrom') || '/';
+  sessionStorage.removeItem('redirectFrom');
       navigate(from, { replace: true });
     } else {
       navigate('/', { replace: true });

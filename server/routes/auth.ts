@@ -16,12 +16,15 @@ const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
 const JWT_SECRET = process.env.JWT_SECRET || "dev_jwt_secret_change_me";
 const isProd = process.env.NODE_ENV === "production";
+const COOKIE_SAME_SITE =
+  (process.env.COOKIE_SAME_SITE as "lax" | "none" | "strict" | undefined) ||
+  (isProd ? "none" : "lax");
 
 const setTokenCookie = (res: Response, token: string, maxAge: number): void => {
   res.cookie("auth_token", token, {
     httpOnly: true,
-    secure: isProd,
-    sameSite: "lax",
+    secure: isProd || COOKIE_SAME_SITE === "none",
+    sameSite: COOKIE_SAME_SITE,
     maxAge,
     path: "/",
   });
@@ -30,8 +33,8 @@ const setTokenCookie = (res: Response, token: string, maxAge: number): void => {
 const clearTokenCookie = (res: Response): void => {
   res.cookie("auth_token", "", {
     httpOnly: true,
-    secure: isProd,
-    sameSite: "lax",
+    secure: isProd || COOKIE_SAME_SITE === "none",
+    sameSite: COOKIE_SAME_SITE,
     maxAge: 0,
     path: "/",
   });

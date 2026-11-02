@@ -4,6 +4,7 @@ import axios from "axios";
 import Navbar from "../Components/Navbar";
 import Footer from "../Components/Footer";
 import { useAuth } from "../AuthContext";
+import { useFeedback } from "../Components/Feedback";
 
 interface CartItem {
   productId?: string | null;
@@ -41,6 +42,7 @@ const Price: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const feedback = useFeedback();
   const state = location.state as LocationState | undefined;
   const cartItems = state?.cart || [];
   const singleProduct = state?.product;
@@ -171,7 +173,7 @@ const Price: React.FC = () => {
       if (paymentMethod === "Cash on Delivery") {
         await axios.post(`${backendUrl}/api/product`, orderPayload);
         if (!singleProduct) {
-          localStorage.removeItem("aeroCart");
+          sessionStorage.removeItem("aeroCart");
         }
         setOrderComplete(true);
         return;
@@ -214,7 +216,7 @@ const Price: React.FC = () => {
       });
     } catch (error: any) {
       console.error(error);
-      alert(
+      feedback.error(
         error?.response?.data?.message ||
           error?.message ||
           "Failed to place order. Please try again."

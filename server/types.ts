@@ -7,6 +7,7 @@ declare global {
 
     interface Request {
       admin?: {
+        userId: number;
         email: string;
         role: string;
         iat?: number;

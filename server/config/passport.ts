@@ -168,10 +168,14 @@ export const handleGoogleCallback = async (
       { expiresIn: "12h" }
     );
 
+    const isProd = process.env.NODE_ENV === "production";
+    const COOKIE_SAME_SITE =
+      (process.env.COOKIE_SAME_SITE as "lax" | "none" | "strict" | undefined) ||
+      (isProd ? "none" : "lax");
     res.cookie("auth_token", localToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: isProd || COOKIE_SAME_SITE === "none",
+      sameSite: COOKIE_SAME_SITE,
       maxAge: 12 * 60 * 60 * 1000,
       path: "/",
     });

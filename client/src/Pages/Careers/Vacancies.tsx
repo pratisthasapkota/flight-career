@@ -43,7 +43,7 @@ const Vacancies = () => {
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [appliedIds, setAppliedIds] = useState<Set<number | string>>(() => {
     try {
-      const stored = localStorage.getItem("appliedVacancyIdsByEmail");
+      const stored = sessionStorage.getItem("appliedVacancyIdsByEmail");
       if (!stored) return new Set();
       const map: Record<string, number[]> = JSON.parse(stored);
       return new Set(Object.keys(map).flatMap((emailKey) => map[emailKey] || []));
@@ -55,7 +55,7 @@ const Vacancies = () => {
   useEffect(() => {
     if (!user?.email) return;
     try {
-      const stored = localStorage.getItem("appliedVacancyIdsByEmail");
+      const stored = sessionStorage.getItem("appliedVacancyIdsByEmail");
       if (!stored) return;
       const map: Record<string, (string | number)[]> = JSON.parse(stored);
       const ids = map[user.email.toLowerCase()] || [];
@@ -170,10 +170,10 @@ const Vacancies = () => {
         const next = new Set(prev).add(selectedVacancy!.id);
         const email = formData.email.toLowerCase();
         try {
-          const stored = localStorage.getItem("appliedVacancyIdsByEmail");
+          const stored = sessionStorage.getItem("appliedVacancyIdsByEmail");
           const map: Record<string, (string | number)[]> = stored ? JSON.parse(stored) : {};
           map[email] = [...new Set([...(map[email] || []), selectedVacancy!.id])];
-          localStorage.setItem("appliedVacancyIdsByEmail", JSON.stringify(map));
+          sessionStorage.setItem("appliedVacancyIdsByEmail", JSON.stringify(map));
         } catch { /* ignore */ }
         return next;
       });

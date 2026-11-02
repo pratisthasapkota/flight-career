@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, asc, eq, type SQL } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { college } from "../db/schema.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -33,7 +33,18 @@ const collegeSchema = z.object({
 router.get(
   "/",
   asyncHandler(async (req: Request, res: Response) => {
-    const rows = await db.select().from(college);
+    const conditions: SQL[] = [];
+
+    if (req.query.active === "true" || req.query.active === "false") {
+      conditions.push(eq(college.active, req.query.active === "true"));
+    }
+
+    const rows = await db
+      .select()
+      .from(college)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(asc(college.id));
+
     const items = rows.map((r) => ({
       ...r,
       features: r.features ? r.features.split(",") : [],

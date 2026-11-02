@@ -7,7 +7,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { sniffFileType, RESUME_CONTENT_TYPES } from "../utils/fileType.js";
 import {
@@ -29,6 +29,9 @@ import {
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
 const isProd = process.env.NODE_ENV === "production";
+const COOKIE_SAME_SITE =
+  (process.env.COOKIE_SAME_SITE as "lax" | "none" | "strict" | undefined) ||
+  (isProd ? "none" : "lax");
 
 const router = Router();
 
@@ -37,8 +40,8 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev_jwt_secret_change_me";
 const setAdminTokenCookie = (res: Response, token: string, maxAge: number): void => {
   res.cookie("admin_token", token, {
     httpOnly: true,
-    secure: isProd,
-    sameSite: "lax",
+    secure: isProd || COOKIE_SAME_SITE === "none",
+    sameSite: COOKIE_SAME_SITE,
     maxAge,
     path: "/",
   });
@@ -47,8 +50,8 @@ const setAdminTokenCookie = (res: Response, token: string, maxAge: number): void
 const clearAdminTokenCookie = (res: Response): void => {
   res.cookie("admin_token", "", {
     httpOnly: true,
-    secure: isProd,
-    sameSite: "lax",
+    secure: isProd || COOKIE_SAME_SITE === "none",
+    sameSite: COOKIE_SAME_SITE,
     maxAge: 0,
     path: "/",
   });
@@ -57,8 +60,8 @@ const clearAdminTokenCookie = (res: Response): void => {
 const setCsrfCookie = (res: Response, token: string, maxAge: number): void => {
   res.cookie("admin_csrf", token, {
     httpOnly: false,
-    secure: isProd,
-    sameSite: "lax",
+    secure: isProd || COOKIE_SAME_SITE === "none",
+    sameSite: COOKIE_SAME_SITE,
     maxAge,
     path: "/",
   });
@@ -67,15 +70,14 @@ const setCsrfCookie = (res: Response, token: string, maxAge: number): void => {
 const clearCsrfCookie = (res: Response): void => {
   res.cookie("admin_csrf", "", {
     httpOnly: false,
-    secure: isProd,
-    sameSite: "lax",
+    secure: isProd || COOKIE_SAME_SITE === "none",
+    sameSite: COOKIE_SAME_SITE,
     maxAge: 0,
     path: "/",
   });
 };
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
-const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
+const ADMIN_SESSION_MS = 24 * 60 * 60 * 1000;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -116,37 +118,78 @@ router.post(
     }
 
     const { email, password } = parsed.data;
-    if (email !== ADMIN_EMAIL) {
-      console.error("[admin] Login failed: email mismatch");
-      return res
-        .status(401)
-        .json({ success: false, message: "Invalid credentials" });
-    }
-    if (!ADMIN_PASSWORD_HASH) {
-      console.error("[admin] Login failed: ADMIN_PASSWORD_HASH not set");
-      return res
-        .status(401)
-        .json({ success: false, message: "Invalid credentials" });
-    }
-    const passwordMatch = await bcrypt.compare(password, ADMIN_PASSWORD_HASH);
-    if (!passwordMatch) {
-      console.error("[admin] Login failed: password mismatch");
+    const normalizedEmail = email.toLowerCase();
+
+    const result = await db
+      .select()
+      .from(login)
+      .where(eq(login.email, normalizedEmail));
+
+    const user = result[0];
+    const passwordMatch = user
+      ? await bcrypt.compare(password, user.password)
+      : false;
+
+    if (!user || !user.isAdmin || !passwordMatch) {
+      console.error("[admin] Login failed: invalid credentials");
       return res
         .status(401)
         .json({ success: false, message: "Invalid credentials" });
     }
 
+    if (!user.verified) {
+      return res
+        .status(403)
+        .json({ success: false, message: "Admin account is not verified" });
+    }
+
     const token = jwt.sign(
-      { email, role: "admin" },
+      { sub: user.id, email: user.email, role: "admin" },
       JWT_SECRET,
-      {
-        expiresIn: "24h",
-      }
+      { expiresIn: "24h" }
     );
-    setAdminTokenCookie(res, token, 24 * 60 * 60 * 1000);
+    setAdminTokenCookie(res, token, ADMIN_SESSION_MS);
     const csrfToken = crypto.randomBytes(32).toString("hex");
-    setCsrfCookie(res, csrfToken, 24 * 60 * 60 * 1000);
-    res.json({ success: true, csrfToken, message: "Admin logged in successfully" });
+    setCsrfCookie(res, csrfToken, ADMIN_SESSION_MS);
+    res.json({
+      success: true,
+      csrfToken,
+      user: { id: user.id, email: user.email, isAdmin: true },
+      message: "Admin logged in successfully",
+    });
+  })
+);
+
+router.get(
+  "/session",
+  verifyAdmin,
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.admin) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const token = jwt.sign(
+      { sub: req.admin.userId, email: req.admin.email, role: "admin" },
+      JWT_SECRET,
+      { expiresIn: "24h" }
+    );
+    setAdminTokenCookie(res, token, ADMIN_SESSION_MS);
+
+    let csrfToken = req.cookies?.admin_csrf || "";
+    if (!csrfToken) {
+      csrfToken = crypto.randomBytes(32).toString("hex");
+      setCsrfCookie(res, csrfToken, ADMIN_SESSION_MS);
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: req.admin.userId,
+        email: req.admin.email,
+        isAdmin: true,
+      },
+      csrfToken,
+    });
   })
 );
 
@@ -182,13 +225,24 @@ router.get(
   "/applications",
   verifyAdmin,
   asyncHandler(async (req: Request, res: Response) => {
-    const jobs = await db.select().from(apply);
-    const orders = await db.select().from(product);
-    const vacancyApps = await db.select().from(vacancyApplication);
-    const vacancies = await db.select().from(vacancy);
-    const users = await db.select().from(login);
-    const interests = await db.select().from(employeeInterest);
-    const subscribers = await db.select().from(notify);
+    const [jobs, orders, vacancyApps, vacancies, users, interests, subscribers] =
+      await Promise.all([
+        db.select().from(apply).orderBy(desc(apply.createdAt)),
+        db.select().from(product).orderBy(desc(product.orderDate)),
+        db.select().from(vacancyApplication).orderBy(desc(vacancyApplication.createdAt)),
+        db.select().from(vacancy).orderBy(desc(vacancy.id)),
+        db
+          .select({
+            id: login.id,
+            email: login.email,
+            verified: login.verified,
+            isAdmin: login.isAdmin,
+          })
+          .from(login)
+          .orderBy(desc(login.id)),
+        db.select().from(employeeInterest).orderBy(desc(employeeInterest.createdAt)),
+        db.select().from(notify).orderBy(desc(notify.id)),
+      ]);
 
     res.json({
       success: true,

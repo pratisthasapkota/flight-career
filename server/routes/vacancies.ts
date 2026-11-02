@@ -5,7 +5,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { z } from "zod";
-import { and, eq, ilike } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { vacancy, vacancyApplication } from "../db/schema.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -80,15 +80,17 @@ router.get(
   "/",
   asyncHandler(async (req: Request, res: Response) => {
     const { role } = req.query;
-    let results;
-    if (role && role !== "All") {
-      results = await db
-        .select()
-        .from(vacancy)
-        .where(ilike(vacancy.role, String(role)));
-    } else {
-      results = await db.select().from(vacancy);
-    }
+    const roleFilter =
+      typeof role === "string" && role.trim() && role !== "All"
+        ? sql`lower(${vacancy.role}) = lower(${role.trim()})`
+        : undefined;
+
+    const results = await db
+      .select()
+      .from(vacancy)
+      .where(roleFilter)
+      .orderBy(asc(vacancy.id));
+
     res.json({ success: true, data: results });
   })
 );

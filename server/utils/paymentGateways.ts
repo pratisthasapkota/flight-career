@@ -14,6 +14,8 @@ export interface GatewayVerifyResult {
   status?: string;
   message?: string;
   gatewayTxnId?: string;
+  amount?: number;
+  reference?: string;
 }
 
 const KHALTI_INITIATE_URL = "https://khalti.com/api/v2/payment/initiate/";
@@ -120,6 +122,8 @@ export async function verifyKhaltiPayment(
     success: true,
     status: data.status,
     gatewayTxnId: data.transaction_id,
+    amount: data.total_amount,
+    reference: data.pidx,
   };
 }
 
@@ -200,16 +204,39 @@ export async function verifyEsewaPayment(
     status?: string;
     ref_id?: string;
     transaction_id?: string;
+    total_amount?: number | string;
+    product_code?: string;
+    transaction_uuid?: string;
   };
 
   if (data.status !== "COMPLETE") {
     return { success: false, message: `eSewa payment not completed (status: ${data.status})` };
+  }
+  if (
+    data.product_code !== undefined &&
+    String(data.product_code) !== settings.esewaMerchantId
+  ) {
+    return { success: false, message: "eSewa merchant code mismatch." };
+  }
+  if (
+    data.transaction_uuid !== undefined &&
+    String(data.transaction_uuid) !== transactionUuid
+  ) {
+    return { success: false, message: "eSewa transaction reference mismatch." };
+  }
+  if (
+    data.total_amount !== undefined &&
+    Math.abs(Number(data.total_amount) - totalAmount) > 0.01
+  ) {
+    return { success: false, message: "eSewa payment amount mismatch." };
   }
 
   return {
     success: true,
     status: data.status,
     gatewayTxnId: data.transaction_id,
+    amount: data.total_amount !== undefined ? Number(data.total_amount) : undefined,
+    reference: data.transaction_uuid !== undefined ? String(data.transaction_uuid) : undefined,
   };
 }
 
